@@ -59,9 +59,7 @@ impl<PrivateKey: SigningKey> ValidatorSigner<PrivateKey> {
     }
 
     pub fn set_account_address(&mut self, account_address: AccountAddress) {
-        println!("Hello World from validator signer. BEFORE: Account address is {0:?}", self.author);
         self.author = account_address;
-        println!("Hello World from validator signer. AFTER: Account address is {0:?}", self.author);
     }
 }
 
