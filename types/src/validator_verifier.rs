@@ -152,6 +152,15 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
         }
     }
 
+    /// Sets the `round_to_validators' field of the struct ValidatorVerifier
+    pub fn set_round_to_validators(
+        &mut self,
+        round_to_validators_map: HashMap<u64, Vec<AccountAddress>>
+    )
+    {
+        self.round_to_validators = Some(round_to_validators_map);
+    }
+
 
     /// Helper method to initialize with a single author and public key with quorum voting power 1.
     pub fn new_single(author: AccountAddress, public_key: PublicKey) -> Self {
