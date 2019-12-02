@@ -269,18 +269,31 @@ impl SMRNode {
 
         // A map that tells who is the proposer(s) per round
         // Note: If no proposer is defined for a round, we default to the first node
-        let mut twins_round_proposers = HashMap::new();
+        let mut twins_round_proposers: HashMap<Round, Vec<AccountAddress>> = HashMap::new();
         // TODO: Read this from an input file eventually
-        twins_round_proposers.insert(0,[signers[0].author()]);
-        twins_round_proposers.insert(1,[signers[1].author()]);
+        let mut leader_authors = Vec::new();
+        leader_authors.push(signers[0].author());
+        twins_round_proposers.insert(0,leader_authors.clone() );
+
+        leader_authors.clear();
+        leader_authors.push(signers[1].author());
+        twins_round_proposers.insert(1,leader_authors.clone() );
+
         // Make {the twin of node 0} proposer
         let mut twin_index = node_to_twin[&0];
-        twins_round_proposers.insert(2,[signers[twin_index].author()]);
+        leader_authors.clear();
+        leader_authors.push(signers[twin_index].author());
+        twins_round_proposers.insert(2,leader_authors );
         //twins_round_proposers.insert(3,[&1]);
         //twins_round_proposers.insert(4,[&0]);
 
 
         //println!("===========\nsigners[0]: {:?}",signers[0]);
+
+        ValidatorVerifier::set_round_to_validators(
+            &mut validator_verifier,
+            twins_round_proposers,
+        );
 
         let validator_set = if executor_with_reconfig {
             Some((&validator_verifier).into())

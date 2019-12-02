@@ -158,6 +158,7 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
         round_to_validators_map: HashMap<u64, Vec<AccountAddress>>
     )
     {
+        //println!("============\nround_to_validators_map: {:?}",round_to_validators_map);
         self.round_to_validators = Some(round_to_validators_map);
     }
 
