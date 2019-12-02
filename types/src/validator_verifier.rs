@@ -11,6 +11,8 @@ use thiserror::Error;
 // Bano: Check if we need this
 use crate::crypto_proxies::ValidatorSigner;
 
+use std::collections::HashMap;
+
 /// Errors possible during signature verification.
 #[derive(Debug, Error, PartialEq)]
 pub enum VerifyError {
@@ -76,6 +78,9 @@ pub struct ValidatorVerifier<PublicKey> {
     quorum_voting_power: u64,
     /// Total voting power of all validators (cached from address_to_validator_info)
     total_voting_power: u64,
+    // Used in twins testing to specify leader(s) per round.
+    // Note: Round is u64
+    round_to_validators: Option<HashMap<u64, Vec<AccountAddress> > >,
 }
 
 impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
@@ -93,10 +98,12 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
         } else {
             total_voting_power * 2 / 3 + 1
         };
+
         ValidatorVerifier {
             address_to_validator_info,
             quorum_voting_power,
             total_voting_power,
+            round_to_validators: None,
         }
     }
 
@@ -121,6 +128,7 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
             address_to_validator_info,
             quorum_voting_power,
             total_voting_power,
+            round_to_validators: None,
         })
     }
 
