@@ -197,14 +197,16 @@ impl NetworkPlayground {
         use ConsensusMsg_oneof::*;
 
         match msg.message {
+
             Some(Proposal(proposal)) => {
-                println!("======= PROPOSAL ============");
-                let proposal: ProposalMsg<Vec<u64>> =
+
+                let the_proposal: ProposalMsg<Vec<u64>> =
                     ProposalUncheckedSignatures::<Vec<u64>>::try_from(proposal)
                         .unwrap()
                         .into();
-                proposal.round()
+                the_proposal.round()
             },
+
             Some(VoteMsg(vote)) => {
                 println!("======= VOTE ============");
                 let vote = consensus_types::vote_msg::VoteMsg::try_from(vote).unwrap();
@@ -284,13 +286,13 @@ impl NetworkPlayground {
         msg_copy
     // Bano: Fork - need to merge with above
         let round = self.get_message_round(src, msg_copy.1.clone());
-        // println!("======== Round is {0} =========", round);
+        println!("======== Round is {0} =========", round);
 
         let mut delivered = false;
-        if(!self.is_message_dropped_round(src.clone(), dst.clone(), round)) {
+        //if(!self.is_message_dropped_round(src.clone(), dst.clone(), round)) {
             node_consensus_tx.send(msg_notif).await.unwrap();
             delivered = true;
-        }
+        //}
         (delivered, msg_copy)
     }
 
