@@ -77,6 +77,16 @@ impl TestConfig {
     pub fn temp_dir(&self) -> Option<&Path> {
         self.temp_dir.as_ref().map(|temp_dir| temp_dir.path())
     }
+
+
+    pub fn set_account_key(&mut self, keypair: Option<AccountKeyPair>) {
+        self.account_keypair = keypair;
+    }
+
+    pub fn set_consensus_key(&mut self, keypair: Option<ConsensusKeyPair>) {
+        self.consensus_keypair = keypair;
+    }
+
 }
 
 #[cfg(test)]

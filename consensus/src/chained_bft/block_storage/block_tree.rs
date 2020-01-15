@@ -248,6 +248,7 @@ where
             .entry(block_id)
             .or_insert_with(|| Arc::clone(&qc));
 
+        // highest_ledger_info updated here
         if self.highest_commit_cert.commit_info().round() < qc.commit_info().round() {
             self.highest_commit_cert = qc;
         }
@@ -334,19 +335,52 @@ where
         loop {
             match self.get_block(&cur_block_id) {
                 Some(ref block) if block.round() <= self.root().round() => {
+                    /*
+                    println!("=======================");
+                    println!("BlockTree: First condition break");
+                    println!("Block is {0} round is {1}, and root is {2} and round is {3}",
+                             block.id(),block.round(),self.root().id(),self.root().round());
+                    println!("=======================");
+                    */
                     break;
                 }
                 Some(block) => {
+                    /*
+                    println!("=======================");
+                    println!("BlockTree: Second condition push");
+                    println!("Block is {0} round is {1}, and root is {2} and round is {3}",
+                             block.id(),block.round(),self.root().id(),self.root().round());
+                    println!("=======================");
+                    */
                     cur_block_id = block.parent_id();
                     res.push(block);
                 }
-                None => return None,
+                None => {
+                    /*
+                    println!("=======================");
+                    println!("BlockTree: NONE get_block");
+                    println!("=======================");
+                    */
+                    return None;
+                }
             }
         }
         // At this point cur_block.round() <= self.root.round()
         if cur_block_id != self.root_id {
+            /*
+            println!("=======================");
+            println!("BlockTree: NONE cur_block");
+            println!("=======================");
+            */
             return None;
         }
+
+        /*
+        println!("=======================");
+        println!("BlockTree: Printing res of length {0}", res.len());
+        println!("=======================");
+        */
+
         // Called `.reverse()` to get the chronically increased order.
         res.reverse();
         Some(res)

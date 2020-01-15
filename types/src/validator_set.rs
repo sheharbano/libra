@@ -67,10 +67,6 @@ impl ValidatorSetResource {
         &self.change_events
     }
 
-    pub fn last_reconfiguration_time(&self) -> u64 {
-        self.last_reconfiguration_time
-    }
-
     pub fn validator_set(&self) -> &ValidatorSet {
         &self.validator_set
     }

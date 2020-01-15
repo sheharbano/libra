@@ -14,6 +14,10 @@ use std::{
 };
 use thiserror::Error;
 
+use std::collections::HashMap;
+use libra_types::account_address::AccountAddress;
+
+
 mod admission_control_config;
 pub use admission_control_config::*;
 mod rpc_config;
@@ -302,6 +306,56 @@ impl NodeConfig {
         self.set_data_dir(test.temp_dir().unwrap().to_path_buf());
         self.test = Some(test);
     }
+
+    // Creates a 'NodeConfig' with the given credentials in 'test'
+    // the given twin account address 'peer_id'; other info (such
+    // as networking) to be generated randomly as usual (i.e. as
+    // defined in 'template')
+    pub fn random_with_test_and_account(template: &Self, rng: &mut StdRng, test: TestConfig, peer_id: AccountAddress) -> Self {
+        let mut config = template.clone_for_template();
+        config.random_with_test_and_account_internal(rng, test, peer_id);
+        config
+    }
+
+    fn random_with_test_and_account_internal(&mut self, rng: &mut StdRng, test: TestConfig, peer_id: AccountAddress) {
+
+        let mut test_local = TestConfig::new_with_temp_dir();
+        
+        if self.base.role == RoleType::Validator {
+            test_local.account_keypair = test.account_keypair.clone();
+
+            if self.validator_network.is_none() {
+                self.validator_network = Some(NetworkConfig::default());
+            }
+
+            let validator_network = self.validator_network.as_mut().unwrap();
+            validator_network.random_with_peer_id(rng, Some(peer_id));
+
+            test_local.consensus_keypair = test.consensus_keypair.clone();
+
+        } else {
+            self.validator_network = None;
+            if self.full_node_networks.is_empty() {
+                self.full_node_networks.push(NetworkConfig::default());
+            }
+            for network in &mut self.full_node_networks {
+                network.random(rng);
+            }
+        }
+        self.set_data_dir(test_local.temp_dir().unwrap().to_path_buf());
+
+        self.test = Some(test_local);
+    }
+
+
+    /// Sets the `round_to_proposers' field of the NodeConfig field ConsensusConfig
+    pub fn set_round_to_proposers(
+        &mut self,
+        round_to_proposers_map: HashMap<u64, Vec<AccountAddress>>,
+    ) {
+        self.consensus.set_round_to_proposers(round_to_proposers_map);
+    }
+
 }
 
 pub trait PersistableConfig: Serialize + DeserializeOwned {

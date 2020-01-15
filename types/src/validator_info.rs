@@ -101,6 +101,14 @@ impl ValidatorInfo {
     pub fn network_identity_public_key(&self) -> &X25519StaticPublicKey {
         &self.network_identity_public_key
     }
+
+    /// Sets the account address
+    pub fn set_account_address(
+        &mut self,
+        account_address: AccountAddress
+    ) {
+        self.account_address = account_address;
+    }
 }
 
 impl TryFrom<crate::proto::types::ValidatorInfo> for ValidatorInfo {
@@ -135,3 +143,5 @@ impl From<ValidatorInfo> for crate::proto::types::ValidatorInfo {
         }
     }
 }
+
+

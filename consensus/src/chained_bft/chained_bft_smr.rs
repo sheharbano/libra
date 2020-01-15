@@ -8,12 +8,14 @@ use crate::{
         network::{NetworkReceivers, NetworkTask},
         network_interface::{ConsensusNetworkEvents, ConsensusNetworkSender},
         persistent_liveness_storage::PersistentLivenessStorage,
+        test_utils::with_smr_id,
     },
     consensus_provider::ConsensusProvider,
     counters,
     state_replication::{StateComputer, TxnManager},
     util::time_service::ClockTimeService,
 };
+
 use anyhow::Result;
 use consensus_types::common::{Author, Payload, Round};
 use futures::{select, stream::StreamExt};
@@ -124,11 +126,13 @@ impl<T: Payload> ConsensusProvider for ChainedBftSMR<T> {
     /// ProposerElection, Pacemaker, SafetyRules, Network(Populate with known validators), EventProcessor
     fn start(&mut self) -> Result<()> {
         let mut runtime = runtime::Builder::new()
+            .on_thread_start(with_smr_id(self.author.short_str()))
             .thread_name("consensus-")
             .threaded_scheduler()
             .enable_all()
             .build()
             .expect("Failed to create Tokio runtime!");
+
         let input = self.input.take().expect("already started, input is None");
 
         let executor = runtime.handle().clone();

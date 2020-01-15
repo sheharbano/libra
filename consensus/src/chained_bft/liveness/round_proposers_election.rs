@@ -18,7 +18,7 @@ pub struct RoundProposers {
     // Default leader to use if proposers is None
     // The leader election then becomes FixedProposer in practice.
     // We hardcode this to the first validator (smallest index = 0)
-    default_proposer: Author
+    default_proposer: Author,
 }
 
 impl RoundProposers {
@@ -27,7 +27,7 @@ impl RoundProposers {
         Self {
             proposers,
             // We hardcode this to the first validator (smallest index = 0)
-            default_proposer
+            default_proposer,
         }
     }
 
@@ -37,16 +37,15 @@ impl RoundProposers {
             Some(map) => {
                 // If the round has not been specified in the map then
                 // return default proposer, else return the corresponding
-                // proposers
+                // proposer(s)
                 match map.get(&round) {
                     None => vec![self.default_proposer],
                     Some(round_proposers) => round_proposers.to_vec(),
                 }
-            },
+            }
         }
     }
 }
-
 
 impl<T: Payload> ProposerElection<T> for RoundProposers {
     fn is_valid_proposer(&self, author: Author, round: Round) -> Option<Author> {
@@ -60,7 +59,6 @@ impl<T: Payload> ProposerElection<T> for RoundProposers {
     fn get_valid_proposers(&self, round: Round) -> Vec<Author> {
         self.get_proposers(round)
     }
-
 
     fn process_proposal(&mut self, proposal: Block<T>) -> Option<Block<T>> {
         let author = proposal.author()?;
@@ -82,7 +80,6 @@ impl<T: Payload> ProposerElection<T> for RoundProposers {
 
         None
     }
-
 
     fn take_backup_proposal(&mut self, _round: Round) -> Option<Block<T>> {
         None

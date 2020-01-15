@@ -11,12 +11,6 @@ use mirai_annotations::*;
 use std::{collections::BTreeMap, fmt};
 use thiserror::Error;
 
-// Bano: Check if we need this
-use crate::crypto_proxies::ValidatorSigner;
-
-use std::collections::HashMap;
-
-
 /// Errors possible during signature verification.
 #[derive(Debug, Error, PartialEq)]
 pub enum VerifyError {
@@ -24,18 +18,18 @@ pub enum VerifyError {
     /// The author for this signature is unknown by this validator.
     UnknownAuthor,
     #[error(
-        "The voting power ({}) is less than quorum voting power ({})",
-        voting_power,
-        quorum_voting_power
+    "The voting power ({}) is less than quorum voting power ({})",
+    voting_power,
+    quorum_voting_power
     )]
     TooLittleVotingPower {
         voting_power: u64,
         quorum_voting_power: u64,
     },
     #[error(
-        "The number of signatures ({}) is greater than total number of authors ({})",
-        num_of_signatures,
-        num_of_authors
+    "The number of signatures ({}) is greater than total number of authors ({})",
+    num_of_signatures,
+    num_of_authors
     )]
     TooManySignatures {
         num_of_signatures: usize,
@@ -82,32 +76,62 @@ pub struct ValidatorVerifier {
     quorum_voting_power: u64,
     /// Total voting power of all validators (cached from address_to_validator_info)
     total_voting_power: u64,
-    // Used in twins testing to specify leader(s) per round.
-    // Note: Round is u64
-    round_to_validators: Option<HashMap<u64, Vec<AccountAddress> > >,
 }
 
 impl ValidatorVerifier {
     /// Initialize with a map of account address to validator info and set quorum size to
     /// default (`2f + 1`) or zero if `address_to_validator_info` is empty.
+    ///
+    ///
+    ///
     pub fn new(
         address_to_validator_info: BTreeMap<AccountAddress, ValidatorConsensusInfo>,
     ) -> Self {
-        let total_voting_power = address_to_validator_info
+        let mut total_voting_power = address_to_validator_info
             .values()
             .map(|x| x.voting_power)
             .sum();
-        let quorum_voting_power = if address_to_validator_info.is_empty() {
+        let mut quorum_voting_power = if address_to_validator_info.is_empty() {
             0
         } else {
             total_voting_power * 2 / 3 + 1
         };
 
+        // Ignore Twins in quorum calculation
+        // ===============
+
+        let twin_addrs = vec![
+            "f0000000".to_string(),
+            "f1000000".to_string(),
+            "f2000000".to_string(),
+            "f3000000".to_string(),
+            "f4000000".to_string(),
+            "f5000000".to_string(),
+            "f6000000".to_string(),
+            "f7000000".to_string(),
+            "f8000000".to_string(),
+            "f9000000".to_string(),
+        ];
+
+        let mut num_twins = 0;
+        for addr in address_to_validator_info.keys() {
+            let is_twin = twin_addrs.contains(&addr.short_str());
+            if is_twin {
+                num_twins = num_twins + 1;
+            }
+        }
+
+        if num_twins > 0 && total_voting_power > num_twins {
+            total_voting_power = total_voting_power - num_twins;
+            quorum_voting_power = total_voting_power * 2 / 3 + 1
+        }
+
+        // ===============
+
         ValidatorVerifier {
             address_to_validator_info,
             quorum_voting_power,
             total_voting_power,
-            round_to_validators: None,
         }
     }
 
@@ -132,39 +156,8 @@ impl ValidatorVerifier {
             address_to_validator_info,
             quorum_voting_power,
             total_voting_power,
-            round_to_validators: None,
         })
     }
-
-
-    /// Adds a new node entry to address_to_validator_info
-    pub fn add_to_address_to_validator_info(
-        &mut self,
-        account_address: AccountAddress,
-        &target_account_address: &AccountAddress,
-        quorum_voting_power: u64
-    )
-    {
-        let validator_info: Option<&ValidatorInfo<PublicKey>> = self.address_to_validator_info.get(&target_account_address);
-
-        match validator_info {
-            None => println!("[Twins] Error: Could not add Twin to ValidatorVerifier"),
-            Some(info) => {
-                let public_key = info.public_key.to_owned();
-                self.address_to_validator_info.insert(account_address, ValidatorInfo::new(public_key, quorum_voting_power));
-            },
-        }
-    }
-
-    /// Sets the `round_to_validators' field of the struct ValidatorVerifier
-    pub fn set_round_to_validators(
-        &mut self,
-        round_to_validators_map: HashMap<u64, Vec<AccountAddress>>
-    )
-    {
-        self.round_to_validators = Some(round_to_validators_map);
-    }
-
 
     /// Helper method to initialize with a single author and public key with quorum voting power 1.
     pub fn new_single(author: AccountAddress, public_key: Ed25519PublicKey) -> Self {
@@ -385,7 +378,7 @@ pub fn random_validator_verifier(
                 account_address_to_validator_info,
                 custom_voting_power_quorum,
             )
-            .expect("Unable to create testing validator verifier"),
+                .expect("Unable to create testing validator verifier"),
             None => ValidatorVerifier::new(account_address_to_validator_info),
         },
     )

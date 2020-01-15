@@ -567,6 +567,8 @@ impl<T: Payload> EventProcessor<T> {
                 nil_block
             }
         };
+        // This function checks the two voting conditions related to
+        // last voted round and preferred round
         self.execute_and_vote(block).await
     }
 
@@ -576,8 +578,10 @@ impl<T: Payload> EventProcessor<T> {
         qc: &QuorumCert,
         tc: Option<&TimeoutCertificate>,
     ) -> anyhow::Result<()> {
+        // Updates the preferred round
         self.safety_rules.update(qc)?;
         let consensus_state = self.safety_rules.consensus_state()?;
+
         counters::PREFERRED_BLOCK_ROUND.set(consensus_state.preferred_round() as i64);
 
         let mut highest_committed_proposal_round = None;
@@ -624,6 +628,8 @@ impl<T: Payload> EventProcessor<T> {
 
         let proposal_round = proposal.round();
 
+        // This function checks the two voting conditions related to
+        // last voted round and preferred round
         let vote = match self.execute_and_vote(proposal).await {
             Err(e) => {
                 warn!("{:?}", e);
@@ -769,6 +775,8 @@ impl<T: Payload> EventProcessor<T> {
 
         let vote = self
             .safety_rules
+            // This function checks the two voting conditions related to
+            // last voted round and preferred round
             .construct_and_sign_vote(&vote_proposal)
             .with_context(|| format!("{}Rejected{} {}", Fg(Red), Fg(Reset), block))?;
 
