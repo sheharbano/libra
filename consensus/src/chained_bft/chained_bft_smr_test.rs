@@ -679,6 +679,149 @@ fn twins_drop_config_round_test() {
     });
 }
 
+#[test]
+/// node 0 and its twin (twin 0) are both leader, and we split
+/// the network as follows:
+///      partition 1: node 0, node 1, node 2
+///      partition 2: twin 0, twin 1, node 3
+///
+/// The purpose of this test is to create a safety violation;
+/// n2 commits the block proposed by node 0, and node 3 commits
+/// the block proposed by twin 0.
+fn twins_test_simple_safety_attack() {
+    let runtime = consensus_runtime();
+    let mut playground = NetworkPlayground::new(runtime.executor());
+
+    // Index #s of nodes (i.e. target nodes) for which we will create twins
+    let mut target_nodes= vec![];
+    target_nodes.push(0);
+    target_nodes.push(1);
+
+    let (nodes, node_to_twin) =
+        SMRNode::start_num_nodes_with_twins(
+            /* num_nodes */ 4,
+            &mut target_nodes,
+            /* quorum_voting_power */ 3,
+            &mut playground,
+            RoundProposers, //FixedProposer,
+            /* executor_with_reconfig */ false);
+
+    let n0 = nodes[0].signer.author();
+    let n1 = nodes[1].signer.author();
+    let twin0 = nodes[node_to_twin.get(&0).unwrap().to_owned()].signer.author();
+    let twin1 = nodes[node_to_twin.get(&1).unwrap().to_owned()].signer.author();
+    let n2 = nodes[2].signer.author();
+    let n3 = nodes[3].signer.author();
+
+    // `Create static netwok partitions`
+    playground.split_network(vec![&n0, &n1, &n2], vec![&twin0, &twin1, &n3]);
+    /*
+    for round in 1..10 {
+        playground.drop_message_for_round(n0,  twin0, round);
+        playground.drop_message_for_round(twin0,  n0, round);
+        playground.drop_message_for_round(n0,  twin1, round);
+        playground.drop_message_for_round(twin1,  n0, round);
+        playground.drop_message_for_round(n0,  n3, round);
+        playground.drop_message_for_round(n3,  n0, round);
+
+        playground.drop_message_for_round(n1,  twin0, round);
+        playground.drop_message_for_round(twin0,  n1, round);
+        playground.drop_message_for_round(n1,  twin1, round);
+        playground.drop_message_for_round(twin1,  n1, round);
+        playground.drop_message_for_round(n1,  n3, round);
+        playground.drop_message_for_round(n3,  n1, round);
+
+        playground.drop_message_for_round(n2,  twin0, round);
+        playground.drop_message_for_round(twin0,  n2, round);
+        playground.drop_message_for_round(n2,  twin1, round);
+        playground.drop_message_for_round(twin1,  n2, round);
+        playground.drop_message_for_round(n2,  n3, round);
+        playground.drop_message_for_round(n3,  n2, round);
+    }
+    */
+
+    block_on(async move {
+        let _proposals = playground
+            .wait_for_messages(1, NetworkPlayground::proposals_only)
+            .await;
+
+        // Pull enough votes to get a commit on the first block)
+        // The proposer's votes are implicit and do not go in the queue.
+        let votes: Vec<VoteMsg> = playground
+            .wait_for_messages(7, NetworkPlayground::votes_only)
+            .await
+            .into_iter()
+            .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
+            .collect();
+        let proposed_block_id = votes[0].vote().vote_data().proposed().id();
+
+        // Verify that the proposed block id is indeed present in the
+        // block store of replicas and their twins.
+        assert!(nodes[0]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_some());
+        assert!(nodes[1]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_some());
+       assert!(nodes[2]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_some());
+
+        // Check that all nodes of partition 1 have the same QC.
+        let qc_id = nodes[0]
+            .smr
+            .block_store()
+            .unwrap()
+            .highest_quorum_cert()
+            .certified_block()
+            .id();
+        assert_eq!(
+            nodes[1]
+                .smr
+                .block_store()
+                .unwrap()
+                .highest_quorum_cert()
+                .certified_block()
+                .id(),
+            qc_id
+        );
+        assert_eq!(
+            nodes[2]
+                .smr
+                .block_store()
+                .unwrap()
+                .highest_quorum_cert()
+                .certified_block()
+                .id(),
+            qc_id
+        );
+
+        // Check that all nodes in partition 2 have the same QC
+        // TODO
+
+        // Show that the QC of the nodes in parition 1 and partition 2 are different
+        // TODO
+
+        // Show that the QC of all nades are on the same round
+        // TODO
+        let qc_round = nodes[0]
+            .smr
+            .block_store()
+            .unwrap()
+            .highest_quorum_cert()
+            .certified_block().round();
+
+    });
+}
 
 #[test]
 /// Upon startup, the first proposal is sent, delivered and voted by all the participants.
