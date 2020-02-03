@@ -1151,18 +1151,23 @@ fn run_experiment(
     partitions: HashMap<usize,Vec<Vec<usize>>>,
     leaders: HashMap<usize,usize>
 ) {
+    assert_eq!(partitions.len(), leaders.len());
+    let num_of_rounds = partitions.len().clone();
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.executor());
 
-    // TODO: allow any number of nodes
-    assert_eq!(num_nodes, 4);
+    // Index #s of nodes (i.e. target nodes) for which we will create twins
     let mut target_nodes = vec![];
-    target_nodes.push(0);
-    target_nodes.push(1);
+    let f: usize = (num_nodes-1) / 3;
+    for i in 0..f {
+        target_nodes.push(i);
+    }
+    // TODO: 'leaders' should be provided to 'start_num_nodes_with_twins'
+    // (but we first need to address the FIXME in 'start_num_nodes_with_twins').
     let (nodes, node_to_twin) = SMRNode::start_num_nodes_with_twins(
         num_nodes,
-        &mut target_nodes, // Index #s of nodes (i.e. target nodes) for which we will create twins
-        /* quorum_voting_power */ 3,
+        &mut target_nodes,
+        /* quorum_voting_power */ (num_nodes - f) as u64,
         &mut playground,
         RoundProposers,
         /* executor_with_reconfig */ false,
@@ -1171,16 +1176,14 @@ fn run_experiment(
     // Create partitions.
     create_partitions(&mut playground, partitions);
 
-    // TODO: allow to run more rounds
     block_on(async move {
         let _proposals = playground
             .wait_for_messages(1, NetworkPlayground::proposals_only)
             .await;
 
-        // Pull enough votes to get a commit on the first block)
         // The proposer's votes are implicit and do not go in the queue.
         let votes: Vec<VoteMsg> = playground
-            .wait_for_messages(13, NetworkPlayground::votes_only)
+            .wait_for_messages(num_nodes * num_of_rounds, NetworkPlayground::votes_only)
             .await
             .into_iter()
             .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
