@@ -908,20 +908,7 @@ fn create_partitions(
 ) {
     for round in partitions.keys() {
         // TODO: create partitions
-        // playground.drop_message_for_round(n0, twin0, round);
         println!("{}", round);
-        /*
-        assert!(partitions.get(&round).is_some());
-        sets = partitions.get(&round).unwrap();
-        for (i, set) in sets.iter().enumerate() {
-
-            let concatenated = [&first[..], &second[..]].concat();
-
-            for j in 0..set.len() {
-                playground.drop_message_for_round(set[j], twin0, round);
-            }
-        }
-        */
     }
 }
 
@@ -932,20 +919,20 @@ fn is_safety_attack() -> bool {
 
 fn run_experiment(
     num_nodes: usize,
-    partitions: HashMap<usize,Vec<Vec<usize>>>
+    partitions: HashMap<usize,Vec<Vec<usize>>>,
+    leaders: HashMap<usize,usize>
 ) {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.executor());
 
     // TODO: allow any number of nodes
     assert_eq!(num_nodes, 4);
-    // Index #s of nodes (i.e. target nodes) for which we will create twins
     let mut target_nodes = vec![];
     target_nodes.push(0);
     target_nodes.push(1);
     let (nodes, node_to_twin) = SMRNode::start_num_nodes_with_twins(
-        /* num_nodes */ 4,
-        &mut target_nodes,
+        num_nodes,
+        &mut target_nodes, // Index #s of nodes (i.e. target nodes) for which we will create twins
         /* quorum_voting_power */ 3,
         &mut playground,
         RoundProposers,
@@ -981,14 +968,19 @@ fn run_experiment(
 // cargo xtest -p consensus twins_test_safety_attack_generator -- --nocapture
 fn twins_test_safety_attack_generator() {
     let mut partitions: HashMap<usize,Vec<Vec<usize>>> = HashMap::new();
+    let mut leaders: HashMap<usize,usize> = HashMap::new();
     for round in 0..5 {
         partitions.insert(
             /* round */ round,
             vec![vec![0, 1, 2], vec![3, 4, 5]]
         );
+        leaders.insert(
+            /* round */ round,
+            /* leader */ 0 // Fixed leader
+        );
     }
 
-    run_experiment(4, partitions);
+    run_experiment(4, partitions, leaders);
 }
 
 #[test]
