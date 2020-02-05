@@ -50,6 +50,9 @@ libra-temppath = { path = "../common/temppath", version = "0.1.0" }
 libra-types = { path = "../types", version = "0.1.0" }
 vm-runtime = { path = "../language/vm/vm-runtime", version = "0.1.0" }
 
+permutator = "0.4.0"
+itertools = "0.8.2"
+
 [dev-dependencies]
 cached = "0.11.0"
 proptest = "0.9.4"
