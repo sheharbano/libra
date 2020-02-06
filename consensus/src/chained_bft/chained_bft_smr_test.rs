@@ -71,6 +71,7 @@ use consensus_types::{
 
 use permutator::{Combination, XPermutationIterator};
 use itertools::Itertools;
+use itertools::enumerate;
 
 /// Auxiliary struct that is preparing SMR for the test
 struct SMRNode {
@@ -1237,6 +1238,7 @@ fn fill_two_partitions(nodes: Vec<usize>) -> Vec<Vec<Vec<usize>>> {
     list
 }
 
+// NOTE: Does not hande the corner case 3 nodes for 3 partitions.
 fn fill_three_partitions(nodes: Vec<usize>) -> Vec<Vec<Vec<usize>>> {
     let p = 3; // number of partitions
     let l = nodes.len(); // number of nodes
@@ -1291,42 +1293,47 @@ fn test_fill_partitions() {
 #[test]
 /// run:
 /// cargo xtest -p consensus twins_test_safety_attack_generator -- --nocapture
-/// TODO: make it work for more than 2 partitions
+/// TODO: implement leaders
 fn twins_test_safety_attack_generator() {
-    const NUM_OF_ROUNDS: usize = 10; // Play with this parameter
+    const NUM_OF_ROUNDS: usize = 4; // Play with this parameter
     const NUM_OF_NODES: usize = 7; // Play with this parameter
-    let f: usize = (NUM_OF_NODES-1) / 3;
+    const NUM_OF_PARTITIONS: usize = 2; // Play with this parameter
 
+    let f: usize = (NUM_OF_NODES-1) / 3;
     let mut partitions = HashMap::new();
     let mut leaders: HashMap<usize,usize> = HashMap::new();
 
-    let num_of_partitions = 2; // TODO
-    for round in (0..NUM_OF_ROUNDS) {
-        // First fill the bad ndoes. By convention, the first nodes are bad.
-        let mut nodes:Vec<usize> = (0..f).collect();
+    // First fill the bad ndoes. By convention, the first nodes are bad.
+    let mut nodes:Vec<usize> = (0..f).collect();
 
-        // Then, add the other (honest) nodes
-        let mut honest_nodes:Vec<usize> = (f..NUM_OF_NODES).collect();
-        nodes.append(&mut honest_nodes);
+    // Then, add the other (honest) nodes
+    let mut honest_nodes:Vec<usize> = (f..NUM_OF_NODES).collect();
+    nodes.append(&mut honest_nodes);
 
-        // Finally, add the twins of the bad nodes; those created at last by
-        // the function 'start_num_nodes_with_twins'.
-        let mut twin_nodes:Vec<usize> = (NUM_OF_NODES..NUM_OF_NODES+f).collect();
-        nodes.append(&mut twin_nodes);
+    // Finally, add the twins of the bad nodes; those created at last by
+    // the function 'start_num_nodes_with_twins'.
+    let mut twin_nodes:Vec<usize> = (NUM_OF_NODES..NUM_OF_NODES+f).collect();
+    nodes.append(&mut twin_nodes);
 
-        // Fill the partitions in any possible way.
-        // This problems is knows as the 'stars and bars' problem because the (honest)
-        // nodes are *indistinguishable* and the paritions are *distinguishable*.
-        // If we want to consider that nodes are distinguishable as well (perhaps because
-        // different validators may run on different hardware/software), then we need to use
-        // Stirling numbers of the second kind (which makes the problem much more compicated).
-        let list = fill_partitions(nodes, num_of_partitions);
-        partitions.insert(round, list);
+    // Fill the partitions in any possible way.
+    // This problems is knows as the 'stars and bars' problem because the (honest)
+    // nodes are *indistinguishable* and the paritions are *distinguishable*.
+    // If we want to consider that nodes are distinguishable as well (perhaps because
+    // different validators may run on different hardware/software), then we need to use
+    // Stirling numbers of the second kind (which makes the problem much more compicated).
+    let list = fill_partitions(nodes, NUM_OF_PARTITIONS);
+    // Note that for a k-out-of-n permutation, k > n; otherwise the output is empty.
+    let permutations = (0..list.len()).permutations(NUM_OF_ROUNDS);
+    let mut count = 0;
+    for test in permutations {
+        println!("HERE: {:?}", test);
+        for (r, p) in enumerate(test) {
+            partitions.insert(r, list[p].to_vec());
+        }
+        //run_experiment(num_nodes, round_partitions, leaders);
+        count += 1;
     }
-    println!("{:?}", partitions);
-
-
-    //run_experiment(num_nodes, round_partitions, leaders);
+    println!("Number of test cases: {:?}", count);
 }
 
 #[test]
