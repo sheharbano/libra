@@ -1199,98 +1199,133 @@ fn run_experiment(
     });
 }
 
-// Provides all solutions of the the 'stars and bars' problem.
-// Guess how many stars are within each bar; assign them; and recurse to a smaller
-// problem with less stars and one bar less.
-// TODO: write unit test for that.
-fn bars_and_stars(bars:usize, stars:usize, list:Vec<usize>) -> Vec<usize> {
-    if bars == 0 {
-        list
-    } else if bars == 1 {
-        list[0] = stars;
-        bars_and_stars(0, 0,list)
-    } else {
-        for i in 0..(stars+1) {
-            list[bars-1] = i;
-            bars_and_stars(bars-1, stars-i, list);
-        }
+// Solves the 'stars and bars' problem for bars=2. Ideally, we want to implement the
+// full recursive algorthm to accomodate any number of bars. Such algorithm woud work
+// as follwos: 1) guess how many stars are within each bar; 2) assign them; and 3) recurse
+// to a smaller problem with less stars and one bar less.
+// Note however that the function below maintains orders of the nodes, on which our test
+// unit 'twins_test_safety_attack_generator' rely. That is, it always try to put twins
+// in different partitions.
+fn fill_partitions(nodes: Vec<usize>, num_of_partitions: usize) -> Vec<Vec<Vec<usize>>> {
+    assert!(num_of_partitions > 0);
+    assert!(nodes.len() >= num_of_partitions);
+
+    assert!(num_of_partitions <= 3);
+    match num_of_partitions {
+        1 => vec![vec![nodes.to_vec()]],
+        2 => fill_two_partitions(nodes),
+        _ => fill_three_partitions(nodes),
     }
 }
 
+fn fill_two_partitions(nodes: Vec<usize>) -> Vec<Vec<Vec<usize>>> {
+    let p = 2; // number of partitions
+    let l = nodes.len(); // number of nodes
+    let mut list: Vec<Vec<Vec<usize>>> = Vec::new();
+
+    let threshold = match l % p {
+        0 => l/p,
+        _ => l/p + 1,
+    };
+    let mut x = l-p+1;
+    while x >= threshold {
+        let partition_0: Vec<usize> = nodes[0..x].iter().cloned().collect();
+        let partition_1: Vec<usize> = nodes[x..l].iter().cloned().collect();
+        list.push(vec![partition_0, partition_1]);
+        x -= 1;
+    }
+    list
+}
+
+fn fill_three_partitions(nodes: Vec<usize>) -> Vec<Vec<Vec<usize>>> {
+    let p = 3; // number of partitions
+    let l = nodes.len(); // number of nodes
+    let mut list: Vec<Vec<Vec<usize>>> = Vec::new();
+
+    let threshold = match l % p {
+        0 => l/p,
+        _ => l/p + 1,
+    };
+    let mut x = l-p+1;
+    while x >= threshold {
+        // call fill_two_partitions
+        // this will create a few more test cases than what is required
+        // (ie. some superflous cases)
+        let list_two = fill_two_partitions(nodes[x..l].iter().cloned().collect());
+        for item in list_two {
+            let partition_0: Vec<usize> = nodes[0..x].iter().cloned().collect();
+            let partition_1: Vec<usize> = item[0].to_vec();
+            let partition_2: Vec<usize> = item[1].to_vec();
+            list.push(vec![partition_0, partition_1, partition_2]);
+        }
+        x -= 1;
+    }
+    list
+}
+
+#[test]
+/// cargo xtest -p consensus test_fill_partitions -- --nocapture
+fn test_fill_partitions() {
+    let mut list_2 = fill_partitions((0..4).collect(), 2);
+    assert_eq!(
+        list_2,
+        vec![vec![vec![0, 1, 2], vec![3]], vec![vec![0, 1], vec![2, 3]]]
+    );
+    list_2 = fill_partitions((0..3).collect(), 2);
+    assert_eq!(
+        list_2,
+        vec![vec![vec![0, 1], vec![2]]]
+    );
+
+    let mut list_3 = fill_partitions((0..4).collect(), 3);
+    assert_eq!(
+        list_3,
+        vec![vec![vec![0, 1], vec![2], vec![3]]]
+    );
+    list_3 = fill_partitions((0..10).collect(), 3);
+    for item in list_3 {
+        assert_eq!(item[0].len()+item[1].len()+item[2].len(), 10);
+    }
+}
 
 #[test]
 /// run:
 /// cargo xtest -p consensus twins_test_safety_attack_generator -- --nocapture
 /// TODO: make it work for more than 2 partitions
 fn twins_test_safety_attack_generator() {
-    // Creating round partitions
-    /*
-    let mut round_partitions: HashMap<u64,Vec<Vec<AccountAddress>>> = HashMap::new();
-
-    let num_nodes = 7;
-    let (signers, validator_verifier) = random_validator_verifier(num_nodes, None, false);
-
-    let mut nodes = Vec::new();
-    for signer in signers.iter() {
-        nodes.push(signer.author());
-    }
-
-    for round in 0..3 {
-        round_partitions.insert(
-        /* round */ round,
-        vec![ vec![nodes[0], nodes[1], nodes[2]],
-              vec![nodes[3], nodes[4]],
-              vec![nodes[5], nodes[6]]
-        ]
-    );
-    */
-
     const NUM_OF_ROUNDS: usize = 10; // Play with this parameter
     const NUM_OF_NODES: usize = 7; // Play with this parameter
+    let f: usize = (NUM_OF_NODES-1) / 3;
 
-    let mut partitions: HashMap<usize,Vec<Vec<usize>>> = HashMap::new();
+    let mut partitions = HashMap::new();
     let mut leaders: HashMap<usize,usize> = HashMap::new();
 
-    // First fill the bad ndoes / twins.
-    // By convention, the first nodes are bad, and their twins are created at last by
-    // the function 'start_num_nodes_with_twins'.
-    let f: usize = (NUM_OF_NODES-1) / 3;
-    let mut partition_0 = Vec::new();
-    let mut partition_1 = Vec::new();
-    for i in 0..f {
-        partition_0.push(i); // push bad node
-        partition_1.push(i+NUM_OF_NODES); // push the twin of the bad node
+    let num_of_partitions = 2; // TODO
+    for round in (0..NUM_OF_ROUNDS) {
+        // First fill the bad ndoes. By convention, the first nodes are bad.
+        let mut nodes:Vec<usize> = (0..f).collect();
+
+        // Then, add the other (honest) nodes
+        let mut honest_nodes:Vec<usize> = (f..NUM_OF_NODES).collect();
+        nodes.append(&mut honest_nodes);
+
+        // Finally, add the twins of the bad nodes; those created at last by
+        // the function 'start_num_nodes_with_twins'.
+        let mut twin_nodes:Vec<usize> = (NUM_OF_NODES..NUM_OF_NODES+f).collect();
+        nodes.append(&mut twin_nodes);
+
+        // Fill the partitions in any possible way.
+        // This problems is knows as the 'stars and bars' problem because the (honest)
+        // nodes are *indistinguishable* and the paritions are *distinguishable*.
+        // If we want to consider that nodes are distinguishable as well (perhaps because
+        // different validators may run on different hardware/software), then we need to use
+        // Stirling numbers of the second kind (which makes the problem much more compicated).
+        let list = fill_partitions(nodes, num_of_partitions);
+        partitions.insert(round, list);
     }
-
-    // Then, add the other (honest) nodes
-    // This problems is knows as the 'stars and bars' problem because the (honest)
-    // nodes are *indistinguishable* and the paritions are *distinguishable*.
-    // If we want to consider that nodes are distinguishable as well (perhaps because
-    // different validators may run on different hardware/software), then we need to use
-    // Stirling numbers of the second kind (which makes the problem much more compicated).
-    let it = vec![2, 3, 4, 5, 6].into_iter().combinations(2);
-    for v in it {
-        println!("{:?}", v);
-    }
-
-    let it2 = bars_and_stars(5, 2, Vec::new());
-    for v in it2 {
-        println!("{:?}", v);
-    }
-
-    // We then prune all scenarios leading to partitions with less than f honest nodes.
+    println!("{:?}", partitions);
 
 
-    /*
-    let mut data = &[2, 3, 4, 5, 6];
-    let mut counter = 1;
-    data.combination(2).for_each(|mut c| {
-        XPermutationIterator::new(&c, |_| true).for_each(|p| {
-            println!("k-permutation@{}={:?}", counter, p);
-            counter += 1;
-        });
-    });
-    */
     //run_experiment(num_nodes, round_partitions, leaders);
 }
 
