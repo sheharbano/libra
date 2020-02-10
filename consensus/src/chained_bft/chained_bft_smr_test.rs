@@ -920,6 +920,7 @@ fn twins_safety_violation_test() {
         );
     }
 
+
     // Specify round leaders here
     // Will default to the first node, if no leader specified for given round
     let mut twins_round_proposers_idx: HashMap<Round, Vec<usize>> = HashMap::new();
@@ -978,125 +979,126 @@ fn twins_safety_violation_test() {
 
         let mut all_branches: Vec<Vec<Arc<ExecutedBlock<TestPayload>>>> = Vec::new();
 
-        // Branch for node 0
+        for i in 0..nodes.len() {
+            let branch_head = nodes[i]
+                .smr
+                .block_store()
+                .unwrap()
+                .highest_ledger_info()
+                .commit_info()
+                .id();
 
-        let branch_head0 = nodes[0]
-            .smr
-            .block_store()
-            .unwrap()
-            .highest_ledger_info()
-            .commit_info()
-            .id();
+            let branch: Vec<Arc<ExecutedBlock<TestPayload>>> = nodes[i]
+                .smr
+                .block_store()
+                .unwrap()
+                .path_from_root(branch_head)
+                .unwrap_or_else(Vec::new);
 
-        let branch0: Vec<Arc<ExecutedBlock<TestPayload>>> = nodes[0]
-            .smr
-            .block_store()
-            .unwrap()
-            .path_from_root(branch_head0)
-            .unwrap_or_else(Vec::new);
-
-        all_branches.push(branch0);
-
-
-        // Branch for node 1
-
-        let branch_head1 = nodes[1]
-            .smr
-            .block_store()
-            .unwrap()
-            .highest_ledger_info()
-            .commit_info()
-            .id();
-
-        let branch1: Vec<Arc<ExecutedBlock<TestPayload>>> = nodes[1]
-            .smr
-            .block_store()
-            .unwrap()
-            .path_from_root(branch_head1)
-            .unwrap_or_else(Vec::new);
-
-        all_branches.push(branch1);
-
-        // Branch for node 2
-
-        let branch_head2 = nodes[2]
-            .smr
-            .block_store()
-            .unwrap()
-            .highest_ledger_info()
-            .commit_info()
-            .id();
-
-        let branch2: Vec<Arc<ExecutedBlock<TestPayload>>> = nodes[2]
-            .smr
-            .block_store()
-            .unwrap()
-            .path_from_root(branch_head2)
-            .unwrap_or_else(Vec::new);
-
-        all_branches.push(branch2);
-
-
-        // Branch for node 3
-
-        let branch_head3 = nodes[3]
-            .smr
-            .block_store()
-            .unwrap()
-            .highest_ledger_info()
-            .commit_info()
-            .id();
-
-        let branch3: Vec<Arc<ExecutedBlock<TestPayload>>> = nodes[3]
-            .smr
-            .block_store()
-            .unwrap()
-            .path_from_root(branch_head3)
-            .unwrap_or_else(Vec::new);
-
-        all_branches.push(branch3);
-
-        // Branch for node 4
-
-        let branch_head4 = nodes[4]
-            .smr
-            .block_store()
-            .unwrap()
-            .highest_ledger_info()
-            .commit_info()
-            .id();
-
-        let branch4: Vec<Arc<ExecutedBlock<TestPayload>>> = nodes[4]
-            .smr
-            .block_store()
-            .unwrap()
-            .path_from_root(branch_head4)
-            .unwrap_or_else(Vec::new);
-
-        all_branches.push(branch4);
-
-        // Branch for node 5
-
-        let branch_head5 = nodes[5]
-            .smr
-            .block_store()
-            .unwrap()
-            .highest_ledger_info()
-            .commit_info()
-            .id();
-
-        let branch5: Vec<Arc<ExecutedBlock<TestPayload>>> = nodes[5]
-            .smr
-            .block_store()
-            .unwrap()
-            .path_from_root(branch_head5)
-            .unwrap_or_else(Vec::new);
-
-        all_branches.push(branch5);
-
+            all_branches.push(branch);
+        }
         // Now check if the branches match at all heights
         assert!(!is_safe(all_branches));
     });
+}
+
+#[test]
+/// This test is the same as 'twins_safety_violation_test' except
+/// that we use scenario_executor, rather than doing it manually.
+/// The test demonstrates safety violation with f+1 twins
+///
+/// Setup:
+///
+/// 4 honest nodes (n0, n1, n2, n3), and 2 twins (twin0, twin1)
+///
+/// Leader: For each round n0 and its twin (twin0) are both leaders
+///
+/// Quorum voting power: 2
+///
+/// We split the network as follows:
+///      partition 1: node 0, node 1, node 2
+///      partition 2: twin 0, twin 1, node 3
+///
+/// Test:
+///
+/// The purpose of this test is to create a safety violation;
+/// n2 commits the block proposed by node 0, and n3 commits
+/// the block proposed by twin0.
+///
+/// Run the test:
+/// cargo xtest -p consensus twins_safety_violation_test -- --nocapture
+fn twins_safety_violation_scenario_executor_test() {
+    let runtime = consensus_runtime();
+    let mut playground = NetworkPlayground::new(runtime.executor());
+
+    let num_nodes = 4;
+
+    // Index #s of nodes (i.e. target nodes) for which we will create twins
+    let mut target_nodes = vec![];
+    target_nodes.push(0);
+    target_nodes.push(1);
+
+    // This helps us map target nodes (for which we will create twins)
+    // to corresponding twin indices in 'nodes'. For example, we get
+    // twin for nodes[1] as follows:  nodes[node_to_twin.get(1)]
+    // Similarly we can access entries for twins in other collections like
+    // 'signers' and 'validator_verifier' by using this map
+    let mut node_to_twin: HashMap<usize, usize> = HashMap::new();
+    for (each, target) in target_nodes.iter().enumerate() {
+        let twin_index = num_nodes + each;
+        node_to_twin.insert(*target, twin_index);
+        debug!(
+            "[Twins] Will create Twin for node {0} at index {1}",
+            *target, twin_index
+        );
+    }
+
+    // 4 honest nodes
+    let n0 = 0;
+    let n1 = 1;
+    let n2 = 2;
+    let n3 = 3;
+    // twin of n0
+    let twin0 = node_to_twin.get(&0).unwrap().to_owned();
+    // twin of n1
+    let twin1 = node_to_twin.get(&1).unwrap().to_owned();
+
+
+    let quorum_voting_power = 3;
+
+    // Specify round leaders here
+    // Will default to the first node, if no leader specified for given round
+    let mut twins_round_proposers_idx: HashMap<Round, Vec<usize>> = HashMap::new();
+
+    // Make n0 and twin0 leaders for round 1..29
+    for i in 1..30 {
+        twins_round_proposers_idx.insert(i, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
+    }
+
+    // Create per round partitions
+
+    let mut round_partitions_idx: HashMap<u64,Vec<Vec<usize>>> = HashMap::new();
+
+
+    for round in 0..50 {
+        round_partitions_idx.insert(
+            /* round */ round,
+            vec![
+                    vec![n0, n1, n2],
+                    vec![twin0, twin1, n3]
+            ]
+        );
+    }
+
+    assert!(!execute_scenario(
+        num_nodes,
+        target_nodes,
+        node_to_twin,
+        round_partitions_idx,
+        twins_round_proposers_idx,
+        quorum_voting_power
+    ));
+
 }
 
 
@@ -1104,11 +1106,9 @@ fn twins_safety_violation_test() {
 fn create_partitions(
     playground: &mut NetworkPlayground,
     partitions: HashMap<u64,Vec<Vec<AccountAddress>>>
-) {
-    for round in partitions.keys() {
-        // TODO: create partitions
-        println!("{}", round);
-    }
+) -> bool {
+
+    playground.split_network_round(&partitions)
 }
 
 // Compares branches at each height to check if there's any conflict
@@ -1172,7 +1172,9 @@ fn compare_vectors(vecs: &Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>) -> bool {
             }
         }
     }
-    is_conflict
+
+    // Return negation, because the function is called 'is_safe'
+    !is_conflict
 }
 
 
@@ -1216,54 +1218,26 @@ fn longest_vector(vecs: &Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>) -> (usize, u
 
 
 
-
-fn run_experiment(
+fn execute_scenario(
     num_nodes: usize,
-    partitions: HashMap<u64,Vec<Vec<AccountAddress>>>,
-    leaders: HashMap<usize,usize>
-) {
-    assert_eq!(partitions.len(), leaders.len());
-    let num_of_rounds = partitions.len().clone();
+    target_nodes: Vec<usize>, // the nodes for which to create twins
+    node_to_twin: HashMap<usize, usize>,
+    round_partitions_idx: HashMap<u64,Vec<Vec<usize>>>,
+    twins_round_proposers_idx: HashMap<Round, Vec<usize>>,
+    quorum_voting_power: u64
+) -> bool {
+
+    //assert_eq!(partitions.len(), leaders.len());
+    //let num_of_rounds = partitions.len().clone();
+
     let runtime = consensus_runtime();
+
     let mut playground = NetworkPlayground::new(runtime.executor());
 
-    // Index #s of nodes (i.e. target nodes) for which we will create twins
-    let mut target_nodes = vec![];
-    let f: usize = (num_nodes-1) / 3;
-    for i in 0..f {
-        target_nodes.push(i);
-    }
-
-    // This helps us map target nodes (for which we will create twins)
-    // to corresponding twin indices in 'nodes'. For example, we get
-    // twin for nodes[1] as follows:  nodes[node_to_twin.get(1)]
-    // Similarly we can access entries for twins in other collections like
-    // 'signers' and 'validator_verifier' by using this map
-    let mut node_to_twin: HashMap<usize, usize> = HashMap::new();
-    for (each, target) in target_nodes.iter().enumerate() {
-        let twin_index = num_nodes + each;
-        node_to_twin.insert(*target, twin_index);
-        debug!(
-            "[Twins] Will create Twin for node {0} at index {1}",
-            *target, twin_index
-        );
-    }
-
-
-    // Specify round leaders here
-    // Will default to the first node, if no leader specified for given round
-    let mut twins_round_proposers_idx: HashMap<Round, Vec<usize>> = HashMap::new();
-
-    twins_round_proposers_idx.insert(1, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
-
-    twins_round_proposers_idx.insert(2, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
-
-    twins_round_proposers_idx.insert(3, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
-
     let (nodes, node_to_twin) = SMRNode::start_num_nodes_with_twins(
-        num_nodes,
-        &mut target_nodes,
-        /* quorum_voting_power */ (num_nodes - f) as u64,
+        /* num_nodes */ num_nodes,
+        & target_nodes,
+        /* quorum_voting_power */ quorum_voting_power,
         &mut playground,
         RoundProposers,
         /* executor_with_reconfig */ false,
@@ -1271,26 +1245,84 @@ fn run_experiment(
         node_to_twin
     );
 
-    // Create partitions.
-    create_partitions(&mut playground, partitions);
+
+    // Create partitions
+
+    let mut round_partitions: HashMap<u64,Vec<Vec<AccountAddress>>> = HashMap::new();
+
+    // The partitions have been provided in terms of node indices
+    // Below we just transform those to AccountAddress, which is what
+    // is expected  by 'create_partitions'
+    for (round,partitions) in round_partitions_idx.iter() {
+
+        let mut round_account_addrs: Vec<Vec<AccountAddress>> = Vec::new();
+
+        for part in partitions.iter() {
+
+            let mut account_addrs: Vec<AccountAddress> = Vec::new();
+
+            for idx in part.iter() {
+                account_addrs.push(nodes[idx.clone()].signer.author());
+            }
+
+            round_account_addrs.push(account_addrs);
+        }
+
+        round_partitions.insert(round.clone(), round_account_addrs);
+    }
+
+    // Create partitions
+    create_partitions(&mut playground, round_partitions);
+    // playground.print_drop_config_round();
+
+
+    // Start sending messages
+
+    let mut is_this_safe = true;
 
     block_on(async move {
         let _proposals = playground
-            .wait_for_messages(1, NetworkPlayground::proposals_only)
+            .wait_for_messages(2, NetworkPlayground::proposals_only)
             .await;
 
+        // Pull enough votes to get a commit on the first block)
         // The proposer's votes are implicit and do not go in the queue.
         let votes: Vec<VoteMsg> = playground
-            .wait_for_messages(num_nodes * num_of_rounds, NetworkPlayground::votes_only)
+            .wait_for_messages(40, NetworkPlayground::votes_only)
             .await
             .into_iter()
             .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
             .collect();
-        let proposed_block_id = votes[0].vote().vote_data().proposed().id();
 
-        // Check for safety violations
-        //assert!(!is_safe());
+        // =================
+        // Check if the tree of commits across the two partitions matches
+        // =================
+
+        let mut all_branches: Vec<Vec<Arc<ExecutedBlock<TestPayload>>>> = Vec::new();
+
+        for i in 0..nodes.len() {
+            let branch_head = nodes[i]
+                .smr
+                .block_store()
+                .unwrap()
+                .highest_ledger_info()
+                .commit_info()
+                .id();
+
+            let branch: Vec<Arc<ExecutedBlock<TestPayload>>> = nodes[i]
+                .smr
+                .block_store()
+                .unwrap()
+                .path_from_root(branch_head)
+                .unwrap_or_else(Vec::new);
+
+            all_branches.push(branch);
+        }
+        // Now check if the branches match at all heights
+        is_this_safe = is_safe(all_branches);
     });
+
+    is_this_safe
 }
 
 // Solves the 'stars and bars' problem for bars=2. Ideally, we want to implement the
