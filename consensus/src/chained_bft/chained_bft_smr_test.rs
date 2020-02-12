@@ -1415,20 +1415,69 @@ fn test_fill_partitions() {
     }
 }
 
+// A memory-inefficient implementation of all solutions of Stirling number
+// of second kind. This will probably not work for n > 20.
+fn stirling2(n: usize, k: usize) -> Vec<Vec<Vec<usize>>> {
+    if k == 1 {
+        return vec![vec![(0..n).collect()]];
+    } else if n == k {
+        let mut ret = vec![vec![]];
+        for i in (0..n) {
+            ret[0].push(vec![i])
+        }
+        return ret;
+    } else {
+        let mut s_n_1_k_1 = stirling2(n-1, k-1);
+        for v in &mut s_n_1_k_1 {
+            v.push(vec![n-1]);
+        }
+
+        let mut k_s_n_1_k = Vec::new();
+        let tmp = stirling2(n-1, k);
+        for i in (0..k) {
+            k_s_n_1_k.extend(tmp.iter().cloned());
+        }
+        let size = k*tmp.len();
+        for i in (0..size) {
+            let j = i / tmp.len() as usize;
+            k_s_n_1_k[i][j].push(n-1);
+        }
+
+        s_n_1_k_1.extend(k_s_n_1_k.iter().cloned());
+        return s_n_1_k_1;
+    }
+}
+
+#[test]
+fn test_stirling2() {
+    let mut ret = stirling2(4, 3);
+    assert_eq!(ret, vec![
+        vec![vec![0,1], vec![2], vec![3]],
+        vec![vec![0,2], vec![1], vec![3]],
+        vec![vec![0], vec![1,2], vec![3]],
+        vec![vec![0,3], vec![1], vec![2]],
+        vec![vec![0], vec![1,3], vec![2]],
+        vec![vec![0], vec![1], vec![2,3]],
+    ]);
+
+    ret = stirling2(10, 4);
+    assert_eq!(ret.len(), 34105);
+
+    ret = stirling2(7, 1);
+    assert_eq!(ret.len(), 1);
+}
+
 #[test]
 /// run:
 /// cargo xtest -p consensus twins_test_safety_attack_generator -- --nocapture
-/// TODO: implement leaders
+/// TODO: implement leaders.
 fn twins_test_safety_attack_generator() {
-    const NUM_OF_ROUNDS: usize = 4; // Play with this parameter
-    const NUM_OF_NODES: usize = 7; // Play with this parameter
+    const NUM_OF_ROUNDS: usize = 3; // Play with this parameter
+    const NUM_OF_NODES: usize = 4; // Play with this parameter
     const NUM_OF_PARTITIONS: usize = 2; // Play with this parameter
 
-    let f: usize = (NUM_OF_NODES-1) / 3;
-    let mut partitions = HashMap::new();
-    let mut leaders: HashMap<usize,usize> = HashMap::new();
-
     // First fill the bad ndoes. By convention, the first nodes are bad.
+    let f: usize = (NUM_OF_NODES-1) / 3;
     let mut nodes:Vec<usize> = (0..f).collect();
 
     // Then, add the other (honest) nodes
@@ -1440,25 +1489,59 @@ fn twins_test_safety_attack_generator() {
     let mut twin_nodes:Vec<usize> = (NUM_OF_NODES..NUM_OF_NODES+f).collect();
     nodes.append(&mut twin_nodes);
 
-    // Fill the partitions in any possible way.
-    // This problems is knows as the 'stars and bars' problem because the (honest)
-    // nodes are *indistinguishable* and the paritions are *distinguishable*.
-    // If we want to consider that nodes are distinguishable as well (perhaps because
-    // different validators may run on different hardware/software), then we need to use
-    // Stirling numbers of the second kind (which makes the problem much more compicated).
-    let list = fill_partitions(nodes, NUM_OF_PARTITIONS);
-    // Note that for a k-out-of-n permutation, k > n; otherwise the output is empty.
-    let permutations = (0..list.len()).permutations(NUM_OF_ROUNDS);
-    let mut count = 0;
-    for test in permutations {
-        println!("HERE: {:?}", test);
-        for (r, p) in enumerate(test) {
-            partitions.insert(r, list[p].to_vec());
+    // Find all possible partitions. This problems is knows as Stirling number
+    // of the second kind. Note that many sets of partitions will be useless for us,
+    // such as cases where both twins are in the same partitions (ie. we may want to
+    // prune some of them from the list if the tests take too much time).
+    let list_of_partitions = stirling2(nodes.len(), NUM_OF_PARTITIONS);
+    println!(
+        "There are {:?} ways to allocate {:?} nodes ({:?} honest nodes + {:?} twins) into {:?} partitions.",
+        list_of_partitions.len(), nodes.len(), NUM_OF_NODES-f, 2*f, NUM_OF_PARTITIONS
+    );
+
+    // Note that we need less rounds than possible partitions, otherwise we need to repeat
+    // the same partitions for several rounds (which is not implemented).
+    assert!(list_of_partitions.len() > NUM_OF_ROUNDS);
+
+    // Find all permutations of rounds and possible partitions.
+    // The variable 'permutations' is a list of test cases. Test cases are vectors where the
+    // indeces indicate the round number, and the values indicate the partitions for the round.
+    // E.g., for 3 rounds, one of the test cases will be [5, 0, 1]. This means that we apply the
+    // partitions provided by list_of_partitions[5] at round 0, list_of_partitions[0] at round 1,
+    // and list_of_partitions[1] at round 2.
+    let mut test_cases_without_leaders = Vec::new();
+    let permutations = (0..list_of_partitions.len()).permutations(NUM_OF_ROUNDS);
+    for test_case in permutations {
+        let mut partitions_per_round: HashMap<usize, Vec<Vec<usize>>> = HashMap::new();
+        for (round, partition_index) in enumerate(test_case) {
+            partitions_per_round.insert(round, list_of_partitions[partition_index].to_vec());
         }
-        //run_experiment(num_nodes, round_partitions, leaders);
-        count += 1;
+        test_cases_without_leaders.push(partitions_per_round);
     }
-    println!("Number of test cases: {:?}", count);
+    println!(
+        "If we had a fixed leader, we would have {:?} test cases",
+        test_cases_without_leaders.len()
+    );
+
+    // Finally, find all permutations of test cases with tree types of leaders; (1) honest nodes,
+    // (2) bad nodes, (3) twins of bad nodes.
+    // It would be nicer to test all permutations where all nodes can be leaders, but the problems
+    // would become untractable.
+    let mut test_cases = Vec::new();
+    let leaders = vec![nodes[0]].extend((f..nodes.len()).collect().iter().cloned());
+    println!("Number of possible leaders: {:?}", leaders.len());
+    let permutations = (0..test_cases_without_leaders.len()).permutations(leaders.len());
+    for test_case in permutations {
+        let mut partitions_per_round_per_leader = HashMap::new();
+        for (leader, test_cases_without_leaders_index) in enumerate(test_case) {
+            partitions_per_round_per_leader.insert(
+                leader,
+                test_cases_without_leaders[test_cases_without_leaders_index].clone()
+            );
+        }
+        test_cases.push(partitions_per_round_per_leader);
+    }
+    println!("Total number of test cases: {:?}", test_cases.len());
 }
 
 
