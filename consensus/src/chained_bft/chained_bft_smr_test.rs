@@ -1476,7 +1476,13 @@ fn twins_test_safety_attack_generator() {
     const NUM_OF_NODES: usize = 4; // Play with this parameter
     const NUM_OF_PARTITIONS: usize = 2; // Play with this parameter
 
-    // First fill the bad ndoes. By convention, the first nodes are bad.
+    // Data structures to fill.
+    let mut list_of_partitions;
+    let mut leaders = Vec::new();
+    let mut test_cases_without_rounds = Vec::new();
+    let mut test_cases = Vec::new();
+
+    // First fill the bad nodes. By convention, the first nodes are bad.
     let f: usize = (NUM_OF_NODES-1) / 3;
     let mut nodes:Vec<usize> = (0..f).collect();
 
@@ -1493,7 +1499,7 @@ fn twins_test_safety_attack_generator() {
     // of the second kind. Note that many sets of partitions will be useless for us,
     // such as cases where both twins are in the same partitions (ie. we may want to
     // prune some of them from the list if the tests take too much time).
-    let list_of_partitions = stirling2(nodes.len(), NUM_OF_PARTITIONS);
+    list_of_partitions = stirling2(nodes.len(), NUM_OF_PARTITIONS);
     println!(
         "There are {:?} ways to allocate {:?} nodes ({:?} honest nodes + {:?} twins) into {:?} partitions.",
         list_of_partitions.len(), nodes.len(), NUM_OF_NODES-f, 2*f, NUM_OF_PARTITIONS
@@ -1503,43 +1509,47 @@ fn twins_test_safety_attack_generator() {
     // the same partitions for several rounds (which is not implemented).
     assert!(list_of_partitions.len() > NUM_OF_ROUNDS);
 
-    // Find all permutations of rounds and possible partitions.
+    // There are tree types of leaders; (1) honest nodes, (2) bad nodes, (3) twins of bad nodes.
+    // It would be nicer to test scenarios where all nodes can be leaders, but the problem
+    // would quickly become untractable...
+    let mut good_node: Vec<usize> = vec![f];
+    let mut bad_nodes: Vec<usize> = (0..f).collect();
+    let mut twin_nodes: Vec<usize> = (NUM_OF_NODES..nodes.len()).collect();
+    //leaders.append(&mut good_node); // NOTE: Test with only two types of leaders, otherwise too big
+    leaders.append(&mut bad_nodes);
+    leaders.append(&mut twin_nodes);
+    println!("Number of possible leaders: {:?}", leaders.len());
+
+    // Find all permutations of leaders and possible partitions.
     // The variable 'permutations' is a list of test cases. Test cases are vectors where the
-    // indeces indicate the round number, and the values indicate the partitions for the round.
-    // E.g., for 3 rounds, one of the test cases will be [5, 0, 1]. This means that we apply the
-    // partitions provided by list_of_partitions[5] at round 0, list_of_partitions[0] at round 1,
-    // and list_of_partitions[1] at round 2.
-    let mut test_cases_without_leaders = Vec::new();
-    let permutations = (0..list_of_partitions.len()).permutations(NUM_OF_ROUNDS);
+    // indeces indicate the leader, and the values indicate the partitions for that leader.
+    // E.g., for 3 possible leaders, one of the test cases could be [5, 0, 1]. This means that
+    // we apply the partitions provided by list_of_partitions[5] for the leader leader[0],
+    // list_of_partitions[0] for leader leader[1], and list_of_partitions[1] for leader[2].
+    let permutations = (0..list_of_partitions.len()).permutations(leaders.len());
     for test_case in permutations {
-        let mut partitions_per_round: HashMap<usize, Vec<Vec<usize>>> = HashMap::new();
-        for (round, partition_index) in enumerate(test_case) {
-            partitions_per_round.insert(round, list_of_partitions[partition_index].to_vec());
+        let mut partitions_per_leader: HashMap<usize, usize> = HashMap::new();
+        for (leader_index, partition_index) in enumerate(test_case) {
+            partitions_per_leader.insert(leader_index, partition_index);
         }
-        test_cases_without_leaders.push(partitions_per_round);
+        test_cases_without_rounds.push(partitions_per_leader);
     }
     println!(
-        "If we had a fixed leader, we would have {:?} test cases",
-        test_cases_without_leaders.len()
+        "If we had the same sets of leaders-partitions throughout all rounds, we would have {:?} test cases",
+        test_cases_without_rounds.len()
     );
 
-    // Finally, find all permutations of test cases with tree types of leaders; (1) honest nodes,
-    // (2) bad nodes, (3) twins of bad nodes.
-    // It would be nicer to test all permutations where all nodes can be leaders, but the problems
-    // would become untractable.
-    let mut test_cases = Vec::new();
-    let leaders = vec![nodes[0]].extend((f..nodes.len()).collect().iter().cloned());
-    println!("Number of possible leaders: {:?}", leaders.len());
-    let permutations = (0..test_cases_without_leaders.len()).permutations(leaders.len());
+    // Find all permutations of rounds with the test cases above.
+    let permutations = (0..test_cases_without_rounds.len()).permutations(NUM_OF_ROUNDS);
     for test_case in permutations {
-        let mut partitions_per_round_per_leader = HashMap::new();
-        for (leader, test_cases_without_leaders_index) in enumerate(test_case) {
-            partitions_per_round_per_leader.insert(
-                leader,
-                test_cases_without_leaders[test_cases_without_leaders_index].clone()
+        let mut partitions_per_leader_per_round: HashMap<usize, usize> = HashMap::new();
+        for (round, test_cases_without_rounds_index) in enumerate(test_case) {
+            partitions_per_leader_per_round.insert(
+                round,
+                test_cases_without_rounds_index
             );
         }
-        test_cases.push(partitions_per_round_per_leader);
+        test_cases.push(partitions_per_leader_per_round);
     }
     println!("Total number of test cases: {:?}", test_cases.len());
 }
