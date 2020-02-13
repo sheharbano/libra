@@ -1450,6 +1450,7 @@ fn stirling2(n: usize, k: usize) -> Vec<Vec<Vec<usize>>> {
 }
 
 #[test]
+/// cargo xtest -p consensus test_stirling2 -- --nocapture
 fn test_stirling2() {
     let mut ret = stirling2(4, 3);
     assert_eq!(ret, vec![
@@ -1461,11 +1462,89 @@ fn test_stirling2() {
         vec![vec![0], vec![1], vec![2,3]],
     ]);
 
+    ret = stirling2(5, 2);
+    assert_eq!(ret, vec![
+        vec![vec![0, 1, 2, 3], vec![4]],
+        vec![vec![0, 1, 2, 4], vec![3]],
+        vec![vec![0, 1, 3, 4], vec![2]],
+        vec![vec![0, 2, 3, 4], vec![1]],
+        vec![vec![0, 3, 4], vec![1, 2]],
+        vec![vec![0, 1, 4], vec![2, 3]],
+        vec![vec![0, 2, 4], vec![1, 3]],
+        vec![vec![0, 4], vec![1, 2, 3]],
+        vec![vec![0, 1, 2], vec![3, 4]],
+        vec![vec![0, 1, 3], vec![2, 4]],
+        vec![vec![0, 2, 3], vec![1, 4]],
+        vec![vec![0, 3], vec![1, 2, 4]],
+        vec![vec![0, 1], vec![2, 3, 4]],
+        vec![vec![0, 2], vec![1, 3, 4]],
+        vec![vec![0], vec![1, 2, 3, 4]],
+    ]);
+
     ret = stirling2(10, 4);
     assert_eq!(ret.len(), 34105);
 
     ret = stirling2(7, 1);
     assert_eq!(ret.len(), 1);
+}
+
+// Filter the set of possible partitions by remove some that are unlikely
+// to produce useful results.
+fn filter_partitions(
+    list_of_partitions: Vec<Vec<Vec<usize>>>,
+    num_of_nodes: usize
+) -> Vec<Vec<Vec<usize>>> {
+    // Find the index of bad and twin nodes.
+    // By convention, the first f nodes are bad, and the last f are their twins.
+    let f: usize = (num_of_nodes-1) / 3;
+    let bad_nodes: Vec<usize> = (0..f).collect();
+    let twin_nodes: Vec<usize> = (num_of_nodes..num_of_nodes+f).collect();
+
+    // Remove partitions.
+    let mut filtered_list_of_partitions = Vec::new();
+    for partitions in list_of_partitions {
+        let mut to_remove = false;
+        for partition in partitions.clone() {
+            // Remove the partitions if the node and its twin are both
+            // in the same partition.
+            for (i, bad_node) in enumerate(bad_nodes.clone()) {
+                let twin_node = twin_nodes[i];
+                if partition.contains(&bad_node) && partition.contains(&twin_node) {
+                    to_remove = true;
+                }
+            }
+        }
+        if !to_remove {
+            filtered_list_of_partitions.push(partitions.clone());
+        }
+    }
+    filtered_list_of_partitions
+}
+
+#[test]
+/// cargo xtest -p consensus test_filter_partitions -- --nocapture
+fn test_filter_partitions() {
+    let num_of_nodes = 4;
+    let f = 1;
+    let list_of_partitions = stirling2(num_of_nodes+f, 2);
+    let filtered_list_of_partitions = filter_partitions(list_of_partitions, num_of_nodes);
+    assert_eq!(filtered_list_of_partitions, vec![
+        vec![vec![0, 1, 2, 3], vec![4]],
+        //vec![vec![0, 1, 2, 4], vec![3]],
+        //vec![vec![0, 1, 3, 4], vec![2]],
+        //vec![vec![0, 2, 3, 4], vec![1]],
+        //vec![vec![0, 3, 4], vec![1, 2]],
+        //vec![vec![0, 1, 4], vec![2, 3]],
+        //vec![vec![0, 2, 4], vec![1, 3]],
+        //vec![vec![0, 4], vec![1, 2, 3]],
+        vec![vec![0, 1, 2], vec![3, 4]],
+        vec![vec![0, 1, 3], vec![2, 4]],
+        vec![vec![0, 2, 3], vec![1, 4]],
+        vec![vec![0, 3], vec![1, 2, 4]],
+        vec![vec![0, 1], vec![2, 3, 4]],
+        vec![vec![0, 2], vec![1, 3, 4]],
+        vec![vec![0], vec![1, 2, 3, 4]],
+    ]);
 }
 
 #[test]
@@ -1545,6 +1624,15 @@ fn twins_test_safety_attack_generator() {
         "There are {:?} ways to allocate {:?} nodes ({:?} honest nodes + {:?} twins) into {:?} partitions.",
         list_of_partitions.len(), nodes.len(), NUM_OF_NODES-f, 2*f, NUM_OF_PARTITIONS
     );
+    let old_list_of_partition_length = list_of_partitions.len();
+
+    // Filter the partitions that have both twins in the same partition.
+    list_of_partitions = filter_partitions(list_of_partitions, NUM_OF_NODES);
+    println!(
+        "After filtering, we have {:?} partitions (we filtered out {:?} test cases).",
+        list_of_partitions.len(), old_list_of_partition_length - list_of_partitions.len()
+    );
+
 
     // Note that we need less rounds than possible partitions, otherwise we need to repeat
     // the same partitions for several rounds (which is not implemented).
@@ -1555,12 +1643,12 @@ fn twins_test_safety_attack_generator() {
     //
     // Assign leaders to different partitions.
     //
-    // We don't consider honest_nodes as leaders, only bad_nodes and their twins.
+    // We don't consider honest_nodes as leaders, only pairs of bad_nodes and their twins.
     // Note: It would be nice to test scenarios where all nodes can be leaders,
     // but the problem would quickly become intractable.
     //
     // The set of leaders L looks like this:
-    // { bad_node1, twin_node1, bad_node2, twin_node2, bad_node3, twin_node3, ..}
+    // { (bad_node1, twin_node1), (bad_node2, twin_node2), (bad_node3, twin_node3), ..}
     //
     // =============================================
 
@@ -1568,7 +1656,7 @@ fn twins_test_safety_attack_generator() {
     let mut good_node: Vec<usize> = vec![f]; // Bano: why is this f?
     let mut bad_nodes: Vec<usize> = (0..f).collect();
     let mut twin_nodes: Vec<usize> = (NUM_OF_NODES..nodes.len()).collect();
-    //leaders.append(&mut good_node); // NOTE: Test with only two types of leaders, otherwise too big
+    leaders.append(&mut good_node);
     leaders.append(&mut bad_nodes);
     leaders.append(&mut twin_nodes);
     println!("Number of possible leaders: {:?}", leaders.len());
@@ -1584,15 +1672,18 @@ fn twins_test_safety_attack_generator() {
     //      { {2}, {0,1} }, etc.
     // }
     //
-    // The problem is as follows: for each possible partition (e.g. { {0,1}, {2} }),
-    // find all permutations of the leader set L = {0, 1} for example. Some possible
-    // configurations are:
+    // The problem is as follows: for each possible partition (e.g. { {0, 22, 1}, {2, 11} },
+    // where 11 is the twin of 1 and 22 is the twin of 2), find all permutations of each pair
+    // in the leader set L = { {2,22}, {1,11}}. Some possible configurations are:
     // {
-    //  {0, {0,1}}, {1, {2}},
-    //  {1, {0,1}}, {0, {2}},
-    //  {0, {0,2}}, {1, {1}},
-    //  {1, {0,2}}, {0, {1}}, etc.
+    //  {2, {0, 22, 1}}, {22, {2, 11}},
+    //  {22, {0, 22, 1}}, {2, {2, 11}},
+    //  {1, {0, 22, 1}}, {11, {2, 11}},
+    //  {11, {0, 22, 1}}, {1, {2, 11}}, etc.
     // }
+    //
+    // Note: We want to discard cases where a leader is not part of the corresponding partition,
+    //  e.g. {2, {0, 22, 1}}
     //
     // Bano: The code below doesn't seem to match the description above
     //
@@ -1614,6 +1705,11 @@ fn twins_test_safety_attack_generator() {
         "If we had the same sets of leaders-partitions throughout all rounds, we would have {:?} test cases",
         test_cases_without_rounds.len()
     );
+
+    // =============================================
+    // We now have all possible partition-leader scenarios. Next we
+    // find how to interleave these scenarios across X rounds.
+    // =============================================
 
     // Find all permutations of rounds with the test cases above.
     let permutations = (0..test_cases_without_rounds.len()).permutations(NUM_OF_ROUNDS);
