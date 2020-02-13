@@ -1416,7 +1416,8 @@ fn test_fill_partitions() {
 }
 
 // A memory-inefficient implementation of all solutions of Stirling number
-// of second kind. This will probably not work for n > 20.
+// of second kind (https://en.wikipedia.org/wiki/Stirling_numbers_of_the_second_kind).
+// This will probably not work for n > 20.
 fn stirling2(n: usize, k: usize) -> Vec<Vec<Vec<usize>>> {
     if k == 1 {
         return vec![vec![(0..n).collect()]];
@@ -1470,36 +1471,76 @@ fn test_stirling2() {
 #[test]
 /// run:
 /// cargo xtest -p consensus twins_test_safety_attack_generator -- --nocapture
-/// TODO: implement leaders.
 fn twins_test_safety_attack_generator() {
     const NUM_OF_ROUNDS: usize = 3; // Play with this parameter
     const NUM_OF_NODES: usize = 4; // Play with this parameter
     const NUM_OF_PARTITIONS: usize = 2; // Play with this parameter
 
     // Data structures to fill.
-    let mut list_of_partitions;
+
     let mut leaders = Vec::new();
     let mut test_cases_without_rounds = Vec::new();
     let mut test_cases = Vec::new();
 
+    // =============================================
+    //
+    // Generate indices of nodes. There are three kinds of nodes:
+    // (1) Bad nodes: Represented by 'f', these are the nodes for which
+    //      we will create Twins, to emulate badness.
+    // (2) Honest nodes: These are the honest nodes
+    // (3) Twin nodes: These are the twins of bad nodes (see 1 above)
+    //
+    // Below, we generate indices using the ordering convention:
+    //      bad_nodes, honest_nodes, twin_nodes
+    //  |----------------------------------------------------------------------|
+    //  | 0 ... f-1 | f ... NUM_OF_NODES-1 | NUM_OF_NODES ... NUM_OF_NODES+f-1 |
+    //  |++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++|
+    //  | bad_nodes |    honest_nodes      |            twin_nodes             |
+    //  |----------------------------------------------------------------------|
+    //
+    // =============================================
+
     // First fill the bad nodes. By convention, the first nodes are bad.
-    let f: usize = (NUM_OF_NODES-1) / 3;
-    let mut nodes:Vec<usize> = (0..f).collect();
+    let f: usize = (NUM_OF_NODES - 1) / 3;
+    let mut nodes: Vec<usize> = (0..f).collect();
 
     // Then, add the other (honest) nodes
-    let mut honest_nodes:Vec<usize> = (f..NUM_OF_NODES).collect();
+    let mut honest_nodes: Vec<usize> = (f..NUM_OF_NODES).collect();
     nodes.append(&mut honest_nodes);
 
     // Finally, add the twins of the bad nodes; those created at last by
     // the function 'start_num_nodes_with_twins'.
-    let mut twin_nodes:Vec<usize> = (NUM_OF_NODES..NUM_OF_NODES+f).collect();
+    let mut twin_nodes: Vec<usize> = (NUM_OF_NODES..NUM_OF_NODES + f).collect();
     nodes.append(&mut twin_nodes);
 
-    // Find all possible partitions. This problems is knows as Stirling number
-    // of the second kind. Note that many sets of partitions will be useless for us,
-    // such as cases where both twins are in the same partitions (ie. we may want to
-    // prune some of them from the list if the tests take too much time).
-    list_of_partitions = stirling2(nodes.len(), NUM_OF_PARTITIONS);
+
+    // =============================================
+    //
+    // Find all possible ways in which N nodes can be partitioned into P partitions.
+    //
+    // E.g. for N={0,1,2} and P=2, possible partitions are:
+    // {    { {0,1}, {2} },
+    //      { {0,2}, {1} },
+    //      { {1,2}, {0} },
+    //      { {2}, {0,1} }, etc.
+    // }
+    //
+    // =============================================
+
+
+    // This problems is known as "Stirling Number of the Second Kind".
+    // "In combinatorics, the Stirling numbers of the second kind tell
+    // us how many ways there are of dividing up a set of n objects
+    // (all different, or at least all labeled) into k nonempty subsets."
+    // https://www.statisticshowto.datasciencecentral.com/stirling-numbers-second-kind/
+    //
+    //
+    // Note: Many sets of partitions will be useless for us, e.g. cases where the
+    // bad_node and its twin are in the same partition. We may want to prune some
+    // of them from the list if the tests take too much time.
+
+    let mut list_of_partitions = stirling2(nodes.len(), NUM_OF_PARTITIONS);
+
     println!(
         "There are {:?} ways to allocate {:?} nodes ({:?} honest nodes + {:?} twins) into {:?} partitions.",
         list_of_partitions.len(), nodes.len(), NUM_OF_NODES-f, 2*f, NUM_OF_PARTITIONS
@@ -1507,12 +1548,24 @@ fn twins_test_safety_attack_generator() {
 
     // Note that we need less rounds than possible partitions, otherwise we need to repeat
     // the same partitions for several rounds (which is not implemented).
+    // Bano: Unclear
     assert!(list_of_partitions.len() > NUM_OF_ROUNDS);
 
-    // There are tree types of leaders; (1) honest nodes, (2) bad nodes, (3) twins of bad nodes.
-    // It would be nicer to test scenarios where all nodes can be leaders, but the problem
-    // would quickly become untractable...
-    let mut good_node: Vec<usize> = vec![f];
+    // =============================================
+    //
+    // Assign leaders to different partitions.
+    //
+    // We don't consider honest_nodes as leaders, only bad_nodes and their twins.
+    // Note: It would be nice to test scenarios where all nodes can be leaders,
+    // but the problem would quickly become intractable.
+    //
+    // The set of leaders L looks like this:
+    // { bad_node1, twin_node1, bad_node2, twin_node2, bad_node3, twin_node3, ..}
+    //
+    // =============================================
+
+
+    let mut good_node: Vec<usize> = vec![f]; // Bano: why is this f?
     let mut bad_nodes: Vec<usize> = (0..f).collect();
     let mut twin_nodes: Vec<usize> = (NUM_OF_NODES..nodes.len()).collect();
     //leaders.append(&mut good_node); // NOTE: Test with only two types of leaders, otherwise too big
@@ -1520,13 +1573,36 @@ fn twins_test_safety_attack_generator() {
     leaders.append(&mut twin_nodes);
     println!("Number of possible leaders: {:?}", leaders.len());
 
+
     // Find all permutations of leaders and possible partitions.
+    //
+    // Recall the shape of list_of_partitions, e.g. for N={0,1,2} and P=2,
+    //  possible partitions are:
+    // {    { {0,1}, {2} },
+    //      { {0,2}, {1} },
+    //      { {1,2}, {0} },
+    //      { {2}, {0,1} }, etc.
+    // }
+    //
+    // The problem is as follows: for each possible partition (e.g. { {0,1}, {2} }),
+    // find all permutations of the leader set L = {0, 1} for example. Some possible
+    // configurations are:
+    // {
+    //  {0, {0,1}}, {1, {2}},
+    //  {1, {0,1}}, {0, {2}},
+    //  {0, {0,2}}, {1, {1}},
+    //  {1, {0,2}}, {0, {1}}, etc.
+    // }
+    //
+    // Bano: The code below doesn't seem to match the description above
+    //
     // The variable 'permutations' is a list of test cases. Test cases are vectors where the
-    // indeces indicate the leader, and the values indicate the partitions for that leader.
+    // indices refer to the leader, and the values indicate the partitions for that leader.
     // E.g., for 3 possible leaders, one of the test cases could be [5, 0, 1]. This means that
     // we apply the partitions provided by list_of_partitions[5] for the leader leader[0],
     // list_of_partitions[0] for leader leader[1], and list_of_partitions[1] for leader[2].
     let permutations = (0..list_of_partitions.len()).permutations(leaders.len());
+
     for test_case in permutations {
         let mut partitions_per_leader: HashMap<usize, usize> = HashMap::new();
         for (leader_index, partition_index) in enumerate(test_case) {
