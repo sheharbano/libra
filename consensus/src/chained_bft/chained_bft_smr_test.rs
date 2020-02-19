@@ -1547,11 +1547,22 @@ fn test_filter_partitions() {
     ]);
 }
 
+fn filter_partitions_pick_2(
+    mut list_of_partitions: Vec<Vec<Vec<usize>>>,
+    num_of_rounds: usize
+) -> Vec<Vec<Vec<usize>>> {
+    // pick two possible partitions per rounds
+    if list_of_partitions.len() > 2 * num_of_rounds {
+        list_of_partitions.truncate(2 * num_of_rounds);
+    }
+    list_of_partitions
+}
+
 #[test]
 /// run:
 /// cargo xtest -p consensus twins_test_safety_attack_generator -- --nocapture
 fn twins_test_safety_attack_generator() {
-    const NUM_OF_ROUNDS: usize = 3; // Play with this parameter
+    const NUM_OF_ROUNDS: usize = 4; // Play with this parameter
     const NUM_OF_NODES: usize = 4; // Play with this parameter
     const NUM_OF_PARTITIONS: usize = 2; // Play with this parameter
 
@@ -1627,7 +1638,10 @@ fn twins_test_safety_attack_generator() {
     let old_list_of_partition_length = list_of_partitions.len();
 
     // Filter the partitions that have both twins in the same partition.
-    list_of_partitions = filter_partitions(list_of_partitions, NUM_OF_NODES);
+    //list_of_partitions = filter_partitions(list_of_partitions, NUM_OF_NODES);
+
+    // Choose only two partitions
+    list_of_partitions = filter_partitions_pick_2(list_of_partitions, NUM_OF_ROUNDS);
     println!(
         "After filtering, we have {:?} partitions (we filtered out {:?} test cases).",
         list_of_partitions.len(), old_list_of_partition_length - list_of_partitions.len()
@@ -1652,13 +1666,16 @@ fn twins_test_safety_attack_generator() {
     //
     // =============================================
 
-
+    // Whenever a bad node is selected to be leader, we should:
+    //  - use that bad node as leader if it is in the partition
+    //  - use its twin as leader if that twin is in the partition
+    //  - otherwise, either
+    //      - (1) don't use any leader (and timeout), or
+    //      - (2) pick the first good node to act as leader for the partition
     let mut good_node: Vec<usize> = vec![f]; // Bano: why is this f?
     let mut bad_nodes: Vec<usize> = (0..f).collect();
-    let mut twin_nodes: Vec<usize> = (NUM_OF_NODES..nodes.len()).collect();
-    leaders.append(&mut good_node);
+    //leaders.append(&mut good_node); // NOTE: good nodes cannot be leaders
     leaders.append(&mut bad_nodes);
-    leaders.append(&mut twin_nodes);
     println!("Number of possible leaders: {:?}", leaders.len());
 
 
