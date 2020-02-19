@@ -73,6 +73,8 @@ use permutator::{Combination, XPermutationIterator};
 use itertools::Itertools;
 use itertools::enumerate;
 
+use rand::Rng;
+
 /// Auxiliary struct that is preparing SMR for the test
 struct SMRNode {
     config: NodeConfig,
@@ -1547,15 +1549,30 @@ fn test_filter_partitions() {
     ]);
 }
 
-fn filter_partitions_pick_2(
-    mut list_of_partitions: Vec<Vec<Vec<usize>>>,
-    num_of_rounds: usize
-) -> Vec<Vec<Vec<usize>>> {
-    // pick two possible partitions per rounds
-    if list_of_partitions.len() > 2 * num_of_rounds {
-        list_of_partitions.truncate(2 * num_of_rounds);
+fn filter_partitions_pick_n(
+    list_of_partitions: &mut Vec<Vec<Vec<usize>>>,
+    n: usize) {
+
+    if n < list_of_partitions.len() {
+
+        let mut rng = rand::thread_rng();
+
+        let mut dice = rng.gen_range(0, list_of_partitions.len());
+
+        let mut seen = Vec::new();
+
+        for i in 0..n {
+            list_of_partitions[i] = list_of_partitions[dice].clone();
+
+            seen.push(dice);
+
+            while seen.contains(&dice) {
+                dice = rng.gen_range(0, list_of_partitions.len());
+            }
+        }
+
+        list_of_partitions.truncate(n);
     }
-    list_of_partitions
 }
 
 #[test]
@@ -1568,9 +1585,9 @@ fn twins_test_safety_attack_generator() {
 
     // Data structures to fill.
 
-    let mut leaders = Vec::new();
-    let mut test_cases_without_rounds = Vec::new();
-    let mut test_cases = Vec::new();
+    //let mut leaders = Vec<usize>::new();
+    //let mut test_cases_without_rounds = Vec::new();
+    //let mut test_cases = Vec::new();
 
     // =============================================
     //
@@ -1631,26 +1648,34 @@ fn twins_test_safety_attack_generator() {
 
     let mut list_of_partitions = stirling2(nodes.len(), NUM_OF_PARTITIONS);
 
+    println!("{:?}",list_of_partitions);
+
     println!(
         "There are {:?} ways to allocate {:?} nodes ({:?} honest nodes + {:?} twins) into {:?} partitions.",
         list_of_partitions.len(), nodes.len(), NUM_OF_NODES-f, 2*f, NUM_OF_PARTITIONS
     );
     let old_list_of_partition_length = list_of_partitions.len();
 
+
     // Filter the partitions that have both twins in the same partition.
     //list_of_partitions = filter_partitions(list_of_partitions, NUM_OF_NODES);
 
     // Choose only two partitions
-    list_of_partitions = filter_partitions_pick_2(list_of_partitions, NUM_OF_ROUNDS);
+    //list_of_partitions =
+    filter_partitions_pick_n(&mut list_of_partitions, 3);
+
+    println!("{:?}",list_of_partitions);
+
     println!(
         "After filtering, we have {:?} partitions (we filtered out {:?} test cases).",
         list_of_partitions.len(), old_list_of_partition_length - list_of_partitions.len()
     );
 
 
+    /*
+
     // Note that we need less rounds than possible partitions, otherwise we need to repeat
     // the same partitions for several rounds (which is not implemented).
-    // Bano: Unclear
     assert!(list_of_partitions.len() > NUM_OF_ROUNDS);
 
     // =============================================
@@ -1699,8 +1724,9 @@ fn twins_test_safety_attack_generator() {
     //  {11, {0, 22, 1}}, {1, {2, 11}}, etc.
     // }
     //
-    // Note: We want to discard cases where a leader is not part of the corresponding partition,
-    //  e.g. {2, {0, 22, 1}}
+    // Note: For cases where a leader is not part of the corresponding partition,
+    //  e.g. {2, {0, 22, 1}}, the leader just ends up not being able to propose
+    //  anything at all
     //
     // Bano: The code below doesn't seem to match the description above
     //
@@ -1791,6 +1817,8 @@ fn basic_start_test() {
             genesis.id()
         );
     });
+
+    */
 }
 
 #[test]
@@ -1947,6 +1975,7 @@ async fn basic_commit(
         .await;
 }
 
+/*
 /// Verify the basic e2e flow: blocks are committed, txn manager is notified, block tree is
 /// pruned, restart the node and we can still continue.
 #[test]
@@ -2056,6 +2085,7 @@ fn basic_commit_and_restart_from_clean_storage() {
         );
     });
 }
+*/
 
 #[test]
 fn basic_block_retrieval() {
