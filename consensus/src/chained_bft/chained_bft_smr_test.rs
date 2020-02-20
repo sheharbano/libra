@@ -74,6 +74,7 @@ use itertools::Itertools;
 use itertools::enumerate;
 
 use rand::Rng;
+use permutator::copy::Permutation;
 
 /// Auxiliary struct that is preparing SMR for the test
 struct SMRNode {
@@ -1579,15 +1580,9 @@ fn filter_partitions_pick_n(
 /// run:
 /// cargo xtest -p consensus twins_test_safety_attack_generator -- --nocapture
 fn twins_test_safety_attack_generator() {
-    const NUM_OF_ROUNDS: usize = 4; // Play with this parameter
-    const NUM_OF_NODES: usize = 4; // Play with this parameter
+    const NUM_OF_ROUNDS: usize = 3; // Play with this parameter
+    const NUM_OF_NODES: usize = 10; // Play with this parameter
     const NUM_OF_PARTITIONS: usize = 2; // Play with this parameter
-
-    // Data structures to fill.
-
-    //let mut leaders = Vec<usize>::new();
-    //let mut test_cases_without_rounds = Vec::new();
-    //let mut test_cases = Vec::new();
 
     // =============================================
     //
@@ -1607,25 +1602,44 @@ fn twins_test_safety_attack_generator() {
     //
     // =============================================
 
+    let mut nodes: Vec<usize> = Vec::new();
+
     // First fill the bad nodes. By convention, the first nodes are bad.
     let f: usize = (NUM_OF_NODES - 1) / 3;
-    let mut nodes: Vec<usize> = (0..f).collect();
+    let mut bad_nodes: Vec<usize> = (0..f).collect();
+    nodes.append(&mut bad_nodes.clone());
 
     // Then, add the other (honest) nodes
     let mut honest_nodes: Vec<usize> = (f..NUM_OF_NODES).collect();
-    nodes.append(&mut honest_nodes);
+    nodes.append(&mut honest_nodes.clone());
 
     // Finally, add the twins of the bad nodes; those created at last by
     // the function 'start_num_nodes_with_twins'.
     let mut twin_nodes: Vec<usize> = (NUM_OF_NODES..NUM_OF_NODES + f).collect();
-    nodes.append(&mut twin_nodes);
+    nodes.append(&mut twin_nodes.clone());
+
+
+    // `node_to_twin` is required by `execute_scenario()` which we call
+    //  at the end to execute generated scenarios.
+    // `node_to_twin` maps `bad_nodes` to twins indices in 'nodes'
+    // to corresponding twin indices in 'nodes'. For example, we get
+    // twin for nodes[1] as follows:  nodes[node_to_twin.get(1)]
+    // Similarly we can access entries for twins in other collections like
+    // 'signers' and 'validator_verifier' by using this map
+    let mut node_to_twin: HashMap<usize, usize> = HashMap::new();
+
+    for (each, target) in bad_nodes.iter().enumerate() {
+        let twin_index = NUM_OF_NODES + each;
+        node_to_twin.insert(*target, twin_index);
+    }
 
 
     // =============================================
     //
     // Find all possible ways in which N nodes can be partitioned into P partitions.
+    // We call each possible way a partition scenario.
     //
-    // E.g. for N={0,1,2} and P=2, possible partitions are:
+    // E.g. for N={0,1,2} and P=2, possible partition scenarios are:
     // {    { {0,1}, {2} },
     //      { {0,2}, {1} },
     //      { {1,2}, {0} },
@@ -1646,41 +1660,34 @@ fn twins_test_safety_attack_generator() {
     // bad_node and its twin are in the same partition. We may want to prune some
     // of them from the list if the tests take too much time.
 
-    let mut list_of_partitions = stirling2(nodes.len(), NUM_OF_PARTITIONS);
+    let mut partition_scenarios = stirling2(nodes.len(), NUM_OF_PARTITIONS);
 
-    println!("{:?}",list_of_partitions);
+    //println!("{:?}",partition_scenarios);
 
     println!(
-        "There are {:?} ways to allocate {:?} nodes ({:?} honest nodes + {:?} twins) into {:?} partitions.",
-        list_of_partitions.len(), nodes.len(), NUM_OF_NODES-f, 2*f, NUM_OF_PARTITIONS
+        "There are {:?} ways to allocate {:?} nodes ({:?} honest nodes + {:?} node-twin pairs) into {:?} partitions.",
+        partition_scenarios.len(), nodes.len(), NUM_OF_NODES-f, f, NUM_OF_PARTITIONS
     );
-    let old_list_of_partition_length = list_of_partitions.len();
+    let old_list_of_partition_length = partition_scenarios.len();
 
 
     // Filter the partitions that have both twins in the same partition.
-    //list_of_partitions = filter_partitions(list_of_partitions, NUM_OF_NODES);
+    //partition_scenarios = filter_partitions(partition_scenarios, NUM_OF_NODES);
 
     // Choose only two partitions
-    //list_of_partitions =
-    filter_partitions_pick_n(&mut list_of_partitions, 3);
+    filter_partitions_pick_n(&mut partition_scenarios, 2);
 
-    println!("{:?}",list_of_partitions);
+    //println!("{:?}",partition_scenarios);
 
     println!(
-        "After filtering, we have {:?} partitions (we filtered out {:?} test cases).",
-        list_of_partitions.len(), old_list_of_partition_length - list_of_partitions.len()
+        "After filtering, we have {:?} partition scenarios (we filtered out {:?} scenarios).",
+        partition_scenarios.len(), old_list_of_partition_length - partition_scenarios.len()
     );
 
 
-    /*
-
-    // Note that we need less rounds than possible partitions, otherwise we need to repeat
-    // the same partitions for several rounds (which is not implemented).
-    assert!(list_of_partitions.len() > NUM_OF_ROUNDS);
-
     // =============================================
     //
-    // Assign leaders to different partitions.
+    // Assign leaders to partition scenarios.
     //
     // We don't consider honest_nodes as leaders, only pairs of bad_nodes and their twins.
     // Note: It would be nice to test scenarios where all nodes can be leaders,
@@ -1691,20 +1698,8 @@ fn twins_test_safety_attack_generator() {
     //
     // =============================================
 
-    // Whenever a bad node is selected to be leader, we should:
-    //  - use that bad node as leader if it is in the partition
-    //  - use its twin as leader if that twin is in the partition
-    //  - otherwise, either
-    //      - (1) don't use any leader (and timeout), or
-    //      - (2) pick the first good node to act as leader for the partition
-    let mut good_node: Vec<usize> = vec![f]; // Bano: why is this f?
-    let mut bad_nodes: Vec<usize> = (0..f).collect();
-    //leaders.append(&mut good_node); // NOTE: good nodes cannot be leaders
-    leaders.append(&mut bad_nodes);
-    println!("Number of possible leaders: {:?}", leaders.len());
 
-
-    // Find all permutations of leaders and possible partitions.
+    // Find all combinations of leaders and partition scenarios.
     //
     // Recall the shape of list_of_partitions, e.g. for N={0,1,2} and P=2,
     //  possible partitions are:
@@ -1714,59 +1709,63 @@ fn twins_test_safety_attack_generator() {
     //      { {2}, {0,1} }, etc.
     // }
     //
-    // The problem is as follows: for each possible partition (e.g. { {0, 22, 1}, {2, 11} },
-    // where 11 is the twin of 1 and 22 is the twin of 2), find all permutations of each pair
-    // in the leader set L = { {2,22}, {1,11}}. Some possible configurations are:
+    // The problem is as follows: for each partition scenario (e.g. { {0, 22, 1}, {2, 11} },
+    // where 11 is the twin of 1 and 22 is the twin of 2), find combination of each pair
+    // in the leader set L = { {2,22}, {1,11}} with the partition scenarios. Some possible
+    // combinations are:
+    // Notation: First vector is the leader pair, second vector is the partition scenario
     // {
-    //  {2, {0, 22, 1}}, {22, {2, 11}},
-    //  {22, {0, 22, 1}}, {2, {2, 11}},
-    //  {1, {0, 22, 1}}, {11, {2, 11}},
-    //  {11, {0, 22, 1}}, {1, {2, 11}}, etc.
-    // }
+    //  { {2,22}, {{0, 22, 1}, {2, 11}} },
+    //  { {1,11}, {{0, 22, 1}, {2, 11}} }, } etc.
     //
     // Note: For cases where a leader is not part of the corresponding partition,
     //  e.g. {2, {0, 22, 1}}, the leader just ends up not being able to propose
     //  anything at all
     //
-    // Bano: The code below doesn't seem to match the description above
-    //
-    // The variable 'permutations' is a list of test cases. Test cases are vectors where the
-    // indices refer to the leader, and the values indicate the partitions for that leader.
-    // E.g., for 3 possible leaders, one of the test cases could be [5, 0, 1]. This means that
-    // we apply the partitions provided by list_of_partitions[5] for the leader leader[0],
-    // list_of_partitions[0] for leader leader[1], and list_of_partitions[1] for leader[2].
-    let permutations = (0..list_of_partitions.len()).permutations(leaders.len());
 
-    for test_case in permutations {
-        let mut partitions_per_leader: HashMap<usize, usize> = HashMap::new();
-        for (leader_index, partition_index) in enumerate(test_case) {
-            partitions_per_leader.insert(leader_index, partition_index);
+    // In `partition_scenarios_with_leaders` each element is a pair of leader and
+    // partition scenario
+
+    let mut partition_scenarios_with_leaders = Vec::new();
+
+    // We only add bad_nodes as leaders here, and the twin_node corresponding to bad_nodes
+    // will be added as a leader implicitly by the scenario executor
+    for each_leader in bad_nodes {
+
+        for each_scenario in &partition_scenarios {
+
+            let pair =  (each_leader, each_scenario.clone());
+            partition_scenarios_with_leaders.push(pair);
+
         }
-        test_cases_without_rounds.push(partitions_per_leader);
     }
+
+    //println!("{0:?}", partition_scenarios_with_leaders);
+
     println!(
-        "If we had the same sets of leaders-partitions throughout all rounds, we would have {:?} test cases",
-        test_cases_without_rounds.len()
+        "After combining leaders with partition scenarios, we have {:?} scenario-leader combinations).",
+        partition_scenarios_with_leaders
     );
 
     // =============================================
     // We now have all possible partition-leader scenarios. Next we
-    // find how to interleave these scenarios across X rounds.
+    // find how to arrange these scenarios across NUM_OF_ROUNDS rounds.
     // =============================================
 
-    // Find all permutations of rounds with the test cases above.
-    let permutations = (0..test_cases_without_rounds.len()).permutations(NUM_OF_ROUNDS);
-    for test_case in permutations {
-        let mut partitions_per_leader_per_round: HashMap<usize, usize> = HashMap::new();
-        for (round, test_cases_without_rounds_index) in enumerate(test_case) {
-            partitions_per_leader_per_round.insert(
-                round,
-                test_cases_without_rounds_index
-            );
-        }
-        test_cases.push(partitions_per_leader_per_round);
+    // Number of rounds should be less than scenarios, otherwise we need to repeat
+    // the same scenarios for multiple rounds (which is not implemented).
+    assert!(partition_scenarios_with_leaders.len() > NUM_OF_ROUNDS);
+
+    let test_cases = partition_scenarios_with_leaders.iter().permutations(NUM_OF_ROUNDS);
+
+    /*
+    for each in test_cases {
+        println!("{0:?}",each);
     }
-    println!("Total number of test cases: {:?}", test_cases.len());
+    */
+
+    println!("Total number of test cases generated by scenario_generator: {:?}", test_cases.enumerate().len());
+
 }
 
 
@@ -1817,8 +1816,6 @@ fn basic_start_test() {
             genesis.id()
         );
     });
-
-    */
 }
 
 #[test]
@@ -1975,7 +1972,7 @@ async fn basic_commit(
         .await;
 }
 
-/*
+
 /// Verify the basic e2e flow: blocks are committed, txn manager is notified, block tree is
 /// pruned, restart the node and we can still continue.
 #[test]
@@ -2085,7 +2082,7 @@ fn basic_commit_and_restart_from_clean_storage() {
         );
     });
 }
-*/
+
 
 #[test]
 fn basic_block_retrieval() {
