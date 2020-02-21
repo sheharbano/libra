@@ -1439,26 +1439,26 @@ fn filter_partitions_pick_n(list_of_partitions: &mut Vec<Vec<Vec<usize>>>, n: us
 /// cargo xtest -p consensus twins_test_safety_attack_generator -- --nocapture
 fn twins_test_safety_attack_generator() {
     const NUM_OF_ROUNDS: usize = 3; // Play with this parameter
-    const NUM_OF_NODES: usize = 7; // Play with this parameter
+    const NUM_OF_NODES: usize = 10; // Play with this parameter
     const NUM_OF_PARTITIONS: usize = 2; // Play with this parameter
 
     let f = (NUM_OF_NODES - 1) / 3;
-    let QUORUM_VOTING_POWER: u64 = (NUM_OF_NODES - f) as u64;
+    let quorum_voting_power: u64 = (NUM_OF_NODES - f) as u64;
 
     // =============================================
     //
     // Generate indices of nodes. There are three kinds of nodes:
-    // (1) Bad nodes: Represented by 'f', these are the nodes for which
-    //      we will create Twins, to emulate badness.
+    // (1) Target nodes: Represented by 'f', these are the nodes for which
+    //      we will create Twins, to emulate byzantine behavior.
     // (2) Honest nodes: These are the honest nodes
-    // (3) Twin nodes: These are the twins of bad nodes (see 1 above)
+    // (3) Twin nodes: These are the twins of target nodes (see 1 above)
     //
     // Below, we generate indices using the ordering convention:
-    //      bad_nodes, honest_nodes, twin_nodes
+    //      target_nodes, honest_nodes, twin_nodes
     //  |----------------------------------------------------------------------|
     //  | 0 ... f-1 | f ... NUM_OF_NODES-1 | NUM_OF_NODES ... NUM_OF_NODES+f-1 |
     //  |++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++|
-    //  | bad_nodes |    honest_nodes      |            twin_nodes             |
+    //  | target_nodes |    honest_nodes      |            twin_nodes             |
     //  |----------------------------------------------------------------------|
     //
     // =============================================
@@ -1466,28 +1466,28 @@ fn twins_test_safety_attack_generator() {
     let mut nodes: Vec<usize> = Vec::new();
 
     // First fill the bad nodes. By convention, the first nodes are bad.
-    let mut bad_nodes: Vec<usize> = (0..f).collect();
-    nodes.append(&mut bad_nodes.clone());
+    let mut target_nodes: Vec<usize> = (0..f).collect();
+    nodes.append(&mut target_nodes.clone());
 
     // Then, add the other (honest) nodes
     let mut honest_nodes: Vec<usize> = (f..NUM_OF_NODES).collect();
     nodes.append(&mut honest_nodes.clone());
 
-    // Finally, add the twins of the bad nodes; those created at last by
+    // Finally, add the twins of the target nodes; those created at last by
     // the function 'start_num_nodes_with_twins'.
     let mut twin_nodes: Vec<usize> = (NUM_OF_NODES..NUM_OF_NODES + f).collect();
     nodes.append(&mut twin_nodes.clone());
 
     // `node_to_twin` is required by `execute_scenario()` which we call
     //  at the end to execute generated scenarios.
-    // `node_to_twin` maps `bad_nodes` to twins indices in 'nodes'
+    // `node_to_twin` maps `target_nodes` to twins indices in 'nodes'
     // to corresponding twin indices in 'nodes'. For example, we get
     // twin for nodes[1] as follows:  nodes[node_to_twin.get(1)]
     // Similarly we can access entries for twins in other collections like
     // 'signers' and 'validator_verifier' by using this map
     let mut node_to_twin: HashMap<usize, usize> = HashMap::new();
 
-    for (each, target) in bad_nodes.iter().enumerate() {
+    for (each, target) in target_nodes.iter().enumerate() {
         let twin_index = NUM_OF_NODES + each;
         node_to_twin.insert(*target, twin_index);
     }
@@ -1514,7 +1514,7 @@ fn twins_test_safety_attack_generator() {
     //
     //
     // Note: Many sets of partitions will be useless for us, e.g. cases where the
-    // bad_node and its twin are in the same partition. We may want to prune some
+    // target_node and its twin are in the same partition. We may want to prune some
     // of them from the list if the tests take too much time.
 
     let mut partition_scenarios = stirling2(nodes.len(), NUM_OF_PARTITIONS);
@@ -1539,12 +1539,12 @@ fn twins_test_safety_attack_generator() {
     //
     // Assign leaders to partition scenarios.
     //
-    // We don't consider honest_nodes as leaders, only pairs of bad_nodes and their twins.
+    // We don't consider honest_nodes as leaders, only pairs of target_nodes and their twins.
     // Note: It would be nice to test scenarios where all nodes can be leaders,
     // but the problem would quickly become intractable.
     //
     // The set of leaders L looks like this:
-    // { (bad_node1, twin_node1), (bad_node2, twin_node2), (bad_node3, twin_node3), ..}
+    // { (target_node1, twin_node1), (target_node2, twin_node2), (target_node3, twin_node3), ..}
     //
     // =============================================
 
@@ -1576,9 +1576,9 @@ fn twins_test_safety_attack_generator() {
     // partition scenario
     let mut partition_scenarios_with_leaders = Vec::new();
 
-    // We only add bad_nodes as leaders here, and the twin_node corresponding to bad_nodes
+    // We only add target_nodes as leaders here, and the twin_node corresponding to target_nodes
     // will be added as a leader implicitly by the scenario executor
-    for each_leader in &bad_nodes {
+    for each_leader in &target_nodes {
         for each_scenario in &partition_scenarios {
             let pair = (each_leader, each_scenario.clone());
             partition_scenarios_with_leaders.push(pair);
@@ -1618,8 +1618,8 @@ fn twins_test_safety_attack_generator() {
             let scenario = round_scenario.1.clone();
             let mut leaders = Vec::new();
             leaders.push(leader.clone());
-            // If a bad node is leader, make its twin the leader too
-            if bad_nodes.contains(&leader) {
+            // If a target node is leader, make its twin the leader too
+            if target_nodes.contains(&leader) {
                 let twin_node = node_to_twin.get(&leader).unwrap().clone();
                 leaders.push(twin_node.clone());
             }
@@ -1628,16 +1628,16 @@ fn twins_test_safety_attack_generator() {
             round += 1;
         }
 
-        assert!(!execute_scenario(
-            nodes.len(),
-            &bad_nodes,
+        execute_scenario(
+            NUM_OF_NODES,
+            &target_nodes,
             &node_to_twin,
-            round_partitions_idx,      // changes for each test
-            twins_round_proposers_idx, // changes for each test
-            QUORUM_VOTING_POWER
-        ));
+            round_partitions_idx,      // this changes for each test
+            twins_round_proposers_idx, // this changes for each test
+            quorum_voting_power
+        );
 
-        thread::sleep(time::Duration::from_secs(2));
+        //thread::sleep(time::Duration::from_secs(1));
     }
 }
 
