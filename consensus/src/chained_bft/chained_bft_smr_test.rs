@@ -75,6 +75,8 @@ use permutator::copy::Permutation;
 use rand::Rng;
 use std::{thread, time};
 
+use std::cell::RefCell;
+
 /// Auxiliary struct that is preparing SMR for the test
 struct SMRNode {
     config: NodeConfig,
@@ -972,7 +974,7 @@ fn twins_safety_violation_test() {
             all_branches.push(branch);
         }
         // Now check if the branches match at all heights
-        assert!(!is_safe(all_branches));
+        assert!(is_safe(all_branches));
     });
 }
 
@@ -1059,14 +1061,15 @@ fn twins_safety_violation_scenario_executor_test() {
         );
     }
 
-    assert!(!execute_scenario(
+    execute_scenario(
         num_nodes,
         &target_nodes,
         &node_to_twin,
         round_partitions_idx,
         twins_round_proposers_idx,
-        quorum_voting_power
-    ));
+        quorum_voting_power,
+        true
+    );
 }
 
 fn create_partitions(
@@ -1138,8 +1141,10 @@ fn compare_vectors(vecs: &Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>) -> bool {
         }
     }
 
-    // Return negation, because the function is called 'is_safe'
-    !is_conflict
+    let is_safe = !is_conflict;
+
+    // Return negation, because the calling function is called 'is_safe'
+    is_safe
 }
 
 // This function takes a vector of vectors, and for each vector it prints
@@ -1182,7 +1187,8 @@ fn execute_scenario(
     round_partitions_idx: HashMap<u64, Vec<Vec<usize>>>,
     twins_round_proposers_idx: HashMap<Round, Vec<usize>>,
     quorum_voting_power: u64,
-) -> bool {
+    enable_safety_assertion: bool
+) {
     //assert_eq!(partitions.len(), leaders.len());
     //let num_of_rounds = partitions.len().clone();
 
@@ -1230,7 +1236,7 @@ fn execute_scenario(
 
     // Start sending messages
 
-    let mut is_this_safe = true;
+    let is_this_safe = RefCell::new(true);
 
     block_on(async move {
         let _proposals = playground
@@ -1247,7 +1253,7 @@ fn execute_scenario(
             .collect();
 
         // =================
-        // Check if the tree of commits across the two partitions matches
+        // Check for all nodes if there are any conflicting branches in the tree of commits
         // =================
 
         let mut all_branches: Vec<Vec<Arc<ExecutedBlock<TestPayload>>>> = Vec::new();
@@ -1268,13 +1274,17 @@ fn execute_scenario(
                 .path_from_root(branch_head)
                 .unwrap_or_else(Vec::new);
 
-            all_branches.push(branch);
+            &all_branches.push(branch);
         }
-        // Now check if the branches match at all heights
-        is_this_safe = is_safe(all_branches);
-    });
 
-    is_this_safe
+        // Now check if the branches match at all heights
+        if enable_safety_assertion {
+            assert!(is_safe(all_branches));
+        }
+        else {
+            is_safe(all_branches);
+        }
+    });
 }
 
 // A memory-inefficient implementation of all solutions of Stirling number
@@ -1438,8 +1448,8 @@ fn filter_partitions_pick_n(list_of_partitions: &mut Vec<Vec<Vec<usize>>>, n: us
 /// run:
 /// cargo xtest -p consensus twins_test_safety_attack_generator -- --nocapture
 fn twins_test_safety_attack_generator() {
-    const NUM_OF_ROUNDS: usize = 3; // Play with this parameter
-    const NUM_OF_NODES: usize = 10; // Play with this parameter
+    const NUM_OF_ROUNDS: usize = 15; // Play with this parameter
+    const NUM_OF_NODES: usize = 7; // Play with this parameter
     const NUM_OF_PARTITIONS: usize = 2; // Play with this parameter
 
     let f = (NUM_OF_NODES - 1) / 3;
@@ -1528,7 +1538,7 @@ fn twins_test_safety_attack_generator() {
     //partition_scenarios = filter_partitions(partition_scenarios, NUM_OF_NODES);
 
     // Choose only two partitions
-    filter_partitions_pick_n(&mut partition_scenarios, 2);
+    filter_partitions_pick_n(&mut partition_scenarios, 10);
     println!(
         "After filtering, we have {:?} partition scenarios (we filtered out {:?} scenarios).",
         partition_scenarios.len(),
@@ -1589,7 +1599,7 @@ fn twins_test_safety_attack_generator() {
     partition_scenarios.clear();
     println!(
         "After combining leaders with partition scenarios, we have {:?} scenario-leader combinations).",
-        partition_scenarios_with_leaders
+        partition_scenarios_with_leaders.len()
     );
 
     // =============================================
@@ -1597,8 +1607,15 @@ fn twins_test_safety_attack_generator() {
     // find how to arrange these scenarios across NUM_OF_ROUNDS rounds.
     // =============================================
 
-    // Number of rounds should be less than scenarios, otherwise we need to repeat
-    // the same scenarios for multiple rounds (which is not implemented).
+    // Permutation of n objects into r places, P(n,r) requires that n >= r.
+    // Informally, number of rounds should be less than scenarios, otherwise
+    // we need to repeat the same scenarios for multiple rounds which is
+    // "permutations with replacement" and not implemented.
+    //
+    // Note: If we want to reuse scenarios in a test case, we'll need to
+    // calculate "permutations with replacement". We decided not to do that
+    // for now to limit the number of test cases
+    //
     assert!(partition_scenarios_with_leaders.len() > NUM_OF_ROUNDS);
 
     let test_cases = partition_scenarios_with_leaders
@@ -1610,6 +1627,8 @@ fn twins_test_safety_attack_generator() {
     // =============================================
 
     let mut round = 1;
+    let mut num_test_cases =1;
+
     for each_test in test_cases {
         let mut round_partitions_idx = HashMap::new();
         let mut twins_round_proposers_idx = HashMap::new();
@@ -1634,11 +1653,25 @@ fn twins_test_safety_attack_generator() {
             &node_to_twin,
             round_partitions_idx,      // this changes for each test
             twins_round_proposers_idx, // this changes for each test
-            quorum_voting_power
+            quorum_voting_power,
+            false
         );
 
+        num_test_cases += 1;
         //thread::sleep(time::Duration::from_secs(1));
     }
+
+
+    println!(
+        "\nFinished running total {:?} test cases for {:?} nodes, {:?} node-twin pairs, \
+        {:?} rounds and {:?} partitions\n",
+        num_test_cases,
+        NUM_OF_NODES,
+        f,
+        NUM_OF_ROUNDS,
+        NUM_OF_PARTITIONS
+    );
+
 }
 
 // ===============================

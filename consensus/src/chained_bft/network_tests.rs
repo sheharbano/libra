@@ -94,7 +94,6 @@ impl NetworkPlayground {
     /// they don't block.
     async fn start_node_outbound_handler(
         drop_config: Arc<RwLock<DropConfig>>,
-        drop_config_round: Arc<RwLock<DropConfigRound>>, // Bano: This isn't used at all in this function
         src: Author,
         mut network_reqs_rx: libra_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>,
         mut outbound_msgs_tx: mpsc::Sender<(Author, PeerManagerRequest)>,
@@ -177,7 +176,6 @@ impl NetworkPlayground {
 
         let fut1 = NetworkPlayground::start_node_outbound_handler(
             Arc::clone(&self.drop_config),
-            Arc::clone(&self.drop_config_round),
             author,
             network_reqs_rx,
             self.outbound_msgs_tx.clone(),
