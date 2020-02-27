@@ -1238,8 +1238,6 @@ fn execute_scenario(
 
     // Start sending messages
 
-    let is_this_safe = RefCell::new(true);
-
     block_on(async move {
         let _proposals = playground
             .wait_for_messages(2, NetworkPlayground::proposals_only)
@@ -1473,12 +1471,13 @@ fn twins_test_safety_attack_generator() {
     const NUM_OF_ROUNDS: usize = 4; // Play with this parameter
     const NUM_OF_NODES: usize = 4; // Play with this parameter
     const NUM_OF_PARTITIONS: usize = 2; // Play with this parameter
-    const PARTITIONS_PICK_N: usize = 15; // How many partitions to pick from all possible partition scenarios
+    const PARTITIONS_PICK_N: usize = 5; // How many partitions to pick from all possible partition scenarios
                                          // (assuming there are more "all possible partition scenarios" than
                                          // the number of rounds. This is a filtering mechanism essentially.)
-    const PICK_PARTITIONS_RANDOMLY: bool = true;
-    const WITH_REPLACEMENT: bool = false; // whether to pick n partitions with replacement
-    const IS_DRY_RUN: bool = false; // Don't execute scenarios, just print stats
+    const PICK_PARTITIONS_RANDOMLY: bool = false; // Specifies whether to pick PARTITIONS_PICK_N randomly
+    const WITH_REPLACEMENT: bool = false; // Whether to permute partition scenarios (and corresponding leader)
+    //                                    // over R rounds *with replacement*
+    const IS_DRY_RUN: bool = false; // If true will not execute scenarios, just print stats
 
     //let f = (NUM_OF_NODES - 1) / 3;
 
@@ -1663,9 +1662,14 @@ fn twins_test_safety_attack_generator() {
     // =============================================
 
     let mut round = 1;
-    let mut num_test_cases = 0;
+    let mut num_test_cases = 1;
 
     for each_test in test_cases {
+
+        println!("=====================================");
+        println!("TEST CASE {:?}:  {:?}", num_test_cases, &each_test);
+        println!("=====================================");
+
         let mut round_partitions_idx = HashMap::new();
         let mut twins_round_proposers_idx = HashMap::new();
         for round_scenario in each_test {
@@ -1696,11 +1700,11 @@ fn twins_test_safety_attack_generator() {
             );
         }
 
-        num_test_cases += 1;
-
-        if num_test_cases == 3 {
+        if num_test_cases == 1 {
             break;
         }
+
+        num_test_cases += 1;
 
         //thread::sleep(time::Duration::from_millis(1000));
     }
@@ -1708,7 +1712,7 @@ fn twins_test_safety_attack_generator() {
     println!(
         "\nFinished running total {:?} test cases for {:?} nodes, {:?} node-twin pairs, \
          {:?} rounds and {:?} partitions\n",
-        num_test_cases, NUM_OF_NODES, f, NUM_OF_ROUNDS, NUM_OF_PARTITIONS
+        num_test_cases-1, NUM_OF_NODES, f, NUM_OF_ROUNDS, NUM_OF_PARTITIONS
     );
 }
 
