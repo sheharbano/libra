@@ -161,6 +161,11 @@ impl SMRNode {
         )
     }
 
+    fn stop(mut self) {
+        self.smr.stop();
+    }
+
+
     fn start_num_nodes(
         num_nodes: usize,
         playground: &mut NetworkPlayground,
@@ -1252,38 +1257,62 @@ fn execute_scenario(
             .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
             .collect();
 
-        // =================
-        // Check for all nodes if there are any conflicting branches in the tree of commits
-        // =================
-
-        let mut all_branches: Vec<Vec<Arc<ExecutedBlock<TestPayload>>>> = Vec::new();
-
-        for i in 0..nodes.len() {
-            let branch_head = nodes[i]
-                .smr
-                .block_store()
-                .unwrap()
-                .highest_ledger_info()
-                .commit_info()
-                .id();
-
-            let branch: Vec<Arc<ExecutedBlock<TestPayload>>> = nodes[i]
-                .smr
-                .block_store()
-                .unwrap()
-                .path_from_root(branch_head)
-                .unwrap_or_else(Vec::new);
-
-            &all_branches.push(branch);
-        }
-
-        // Now check if the branches match at all heights
-        if enable_safety_assertion {
-            assert!(is_safe(all_branches));
-        } else {
-            is_safe(all_branches);
-        }
     });
+
+    // =================
+    // Check for all nodes if there are any conflicting branches in the tree of commits
+    // =================
+
+    let mut all_branches: Vec<Vec<Arc<ExecutedBlock<TestPayload>>>> = Vec::new();
+
+    let num_nodes = nodes.len();
+
+
+
+    for i in 0..num_nodes {
+
+        let block_store = nodes[i]
+            .smr
+            .block_store()
+            .unwrap();
+
+        match &block_store {
+            inner => {
+                let branch_head = block_store
+                    .highest_ledger_info()
+                    .commit_info()
+                    .id();
+
+                let branch: Vec<Arc<ExecutedBlock<TestPayload>>> = block_store
+                    .path_from_root(branch_head)
+                    .unwrap_or_else(Vec::new);
+
+                &all_branches.push(branch);
+            },
+            _          => {
+                println!("======================================");
+                println!("Safety check does not include tree of node {:?} due to NULL block store.", i);
+                println!("======================================");
+            },
+        }
+    }
+
+    // Now check if the branches match at all heights
+    if enable_safety_assertion {
+        assert!(is_safe(all_branches));
+    } else {
+        is_safe(all_branches);
+    }
+
+    // Stop all the nodes
+    for each_node in nodes {
+      each_node.stop();
+    }
+
+    // TODO: Note ideally we should also shut down the network playground here,
+    // but there is no existing function to help with that. If memory usage is
+    // high with repeated calls to this function, we will have to implement this
+
 }
 
 // A memory-inefficient implementation of all solutions of Stirling number
@@ -1700,7 +1729,7 @@ fn twins_test_safety_attack_generator() {
             );
         }
 
-        if num_test_cases == 1 {
+        if num_test_cases == 5 {
             break;
         }
 
