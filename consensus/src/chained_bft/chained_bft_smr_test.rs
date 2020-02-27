@@ -1431,7 +1431,8 @@ fn test_filter_partitions() {
 
 fn filter_partitions_pick_n(
     list_of_partitions: &mut Vec<Vec<Vec<usize>>>,
-    n: usize
+    n: usize,
+    pick_randomly: bool
 ) {
     if n < list_of_partitions.len() {
         let mut rng = rand::thread_rng();
@@ -1440,17 +1441,24 @@ fn filter_partitions_pick_n(
 
         let mut seen = Vec::new();
 
-        for i in 0..n {
+        // Filter list_of_partitions so it only contains n randomly selected partitions
+        if pick_randomly {
+            // Pick n random indices, copy their value to beginning of list_of_partitions
+            // and truncate rest of list_of_partitions
+            for i in 0..n {
 
-            list_of_partitions[i] = list_of_partitions[dice].clone();
+                list_of_partitions[i] = list_of_partitions[dice].clone();
 
-            seen.push(dice);
+                seen.push(dice);
 
-            // Repeatedly roll the dice until we get an unseen value
-            while seen.contains(&dice) {
-                dice = rng.gen_range(0, list_of_partitions.len());
+                // Repeatedly roll the dice until we get an unseen value
+                while seen.contains(&dice) {
+                    dice = rng.gen_range(0, list_of_partitions.len());
+                }
             }
         }
+        // else if !pick_randomly just filter list_of_partitions so it only
+        // contains the first n partitions
 
         list_of_partitions.truncate(n);
     }
@@ -1468,6 +1476,7 @@ fn twins_test_safety_attack_generator() {
     const PARTITIONS_PICK_N: usize = 15; // How many partitions to pick from all possible partition scenarios
                                          // (assuming there are more "all possible partition scenarios" than
                                          // the number of rounds. This is a filtering mechanism essentially.)
+    const PICK_PARTITIONS_RANDOMLY: bool = true;
     const WITH_REPLACEMENT: bool = false; // whether to pick n partitions with replacement
     const IS_DRY_RUN: bool = false; // Don't execute scenarios, just print stats
 
@@ -1562,7 +1571,8 @@ fn twins_test_safety_attack_generator() {
     // Choose only two partitions
     filter_partitions_pick_n(
         &mut partition_scenarios,
-        PARTITIONS_PICK_N
+        PARTITIONS_PICK_N,
+        PICK_PARTITIONS_RANDOMLY
     );
 
     println!(
