@@ -1431,22 +1431,27 @@ fn test_filter_partitions() {
 
 fn filter_partitions_pick_n(
     list_of_partitions: &mut Vec<Vec<Vec<usize>>>,
-    n: usize,
-    with_replacement: bool,
+    n: usize
 ) {
     if n < list_of_partitions.len() {
         let mut rng = rand::thread_rng();
+
         let mut dice = rng.gen_range(0, list_of_partitions.len());
+
         let mut seen = Vec::new();
+
         for i in 0..n {
+
             list_of_partitions[i] = list_of_partitions[dice].clone();
-            if !with_replacement {
-                seen.push(dice);
-            }
+
+            seen.push(dice);
+
+            // Repeatedly roll the dice until we get an unseen value
             while seen.contains(&dice) {
                 dice = rng.gen_range(0, list_of_partitions.len());
             }
         }
+
         list_of_partitions.truncate(n);
     }
 }
@@ -1464,7 +1469,7 @@ fn twins_test_safety_attack_generator() {
                                          // (assuming there are more "all possible partition scenarios" than
                                          // the number of rounds. This is a filtering mechanism essentially.)
     const WITH_REPLACEMENT: bool = false; // whether to pick n partitions with replacement
-    const IS_DRY_RUN: bool = true; // Don't execute scenarios, just print stats
+    const IS_DRY_RUN: bool = false; // Don't execute scenarios, just print stats
 
     //let f = (NUM_OF_NODES - 1) / 3;
 
@@ -1557,8 +1562,7 @@ fn twins_test_safety_attack_generator() {
     // Choose only two partitions
     filter_partitions_pick_n(
         &mut partition_scenarios,
-        PARTITIONS_PICK_N,
-        WITH_REPLACEMENT,
+        PARTITIONS_PICK_N
     );
 
     println!(
@@ -1683,6 +1687,11 @@ fn twins_test_safety_attack_generator() {
         }
 
         num_test_cases += 1;
+
+        if num_test_cases == 3 {
+            break;
+        }
+
         //thread::sleep(time::Duration::from_millis(1000));
     }
 
