@@ -800,7 +800,7 @@ fn twins_test_simple_safety_attack() {
             .is_some());
 
         // Check that all nodes of partition 1 have the same QC.
-        let partition_1_qc_id = nodes[0]
+        let commit_id_parition_1 = nodes[0]
             .smr
             .block_store()
             .unwrap()
@@ -815,7 +815,7 @@ fn twins_test_simple_safety_attack() {
                 .highest_quorum_cert()
                 .certified_block()
                 .id(),
-            partition_1_qc_id
+            commit_id_parition_1
         );
         assert_eq!(
             nodes[2]
@@ -825,11 +825,11 @@ fn twins_test_simple_safety_attack() {
                 .highest_quorum_cert()
                 .certified_block()
                 .id(),
-            partition_1_qc_id
+            commit_id_parition_1
         );
 
         // Check that all nodes in partition 2 have the same QC
-        let partition_2_qc_id = nodes[3]
+        let commit_id_parition_2 = nodes[3]
             .smr
             .block_store()
             .unwrap()
@@ -844,7 +844,7 @@ fn twins_test_simple_safety_attack() {
                 .highest_quorum_cert()
                 .certified_block()
                 .id(),
-            partition_2_qc_id
+            commit_id_parition_2
         );
         assert_eq!(
             nodes[5] // twin 1
@@ -854,27 +854,26 @@ fn twins_test_simple_safety_attack() {
                 .highest_quorum_cert()
                 .certified_block()
                 .id(),
-            partition_2_qc_id
+            commit_id_parition_2
         );
 
         // Show that the QC of the nodes in parition 1 and partition 2 are different
-        assert_ne!(partition_1_qc_id, partition_2_qc_id);
+        assert_ne!(commit_id_parition_1, commit_id_parition_2);
 
         // Show that the QC of all nades are on the same round
-        // TODO
-        let partition_1_qc_round = nodes[0]
+        let commit_round_partition_1 = nodes[0]
             .smr
             .block_store()
             .unwrap()
             .highest_quorum_cert()
             .certified_block().round();
-        let partition_2_qc_round = nodes[3]
+        let commit_round_partition_2 = nodes[3]
             .smr
             .block_store()
             .unwrap()
             .highest_quorum_cert()
             .certified_block().round();
-        assert_eq!(partition_1_qc_round, partition_2_qc_round);
+        assert_eq!(commit_round_partition_1, commit_round_partition_2);
     });
 }
 
