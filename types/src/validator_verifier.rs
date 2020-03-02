@@ -80,7 +80,7 @@ pub struct ValidatorVerifier<PublicKey> {
     total_voting_power: u64,
     // Used in twins testing to specify leader(s) per round.
     // Note: Round is u64
-    round_to_validators: Option<HashMap<u64, Vec<AccountAddress>>>,
+    round_to_proposers: Option<HashMap<u64, Vec<AccountAddress>>>,
 }
 
 impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
@@ -103,7 +103,7 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
             address_to_validator_info,
             quorum_voting_power,
             total_voting_power,
-            round_to_validators: None,
+            round_to_proposers: None,
         }
     }
 
@@ -130,7 +130,7 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
             address_to_validator_info,
             quorum_voting_power,
             total_voting_power,
-            round_to_validators: None,
+            round_to_proposers: None,
         })
     }
 
@@ -155,12 +155,12 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
         }
     }
 
-    /// Sets the `round_to_validators' field of the struct ValidatorVerifier
-    pub fn set_round_to_validators(
+    /// Sets the `round_to_proposers' field of the struct ValidatorVerifier
+    pub fn set_round_to_proposers(
         &mut self,
-        round_to_validators_map: HashMap<u64, Vec<AccountAddress>>,
+        round_to_proposers_map: HashMap<u64, Vec<AccountAddress>>,
     ) {
-        self.round_to_validators = Some(round_to_validators_map);
+        self.round_to_proposers = Some(round_to_proposers_map);
     }
 
     /// Helper method to initialize with a single author and public key with quorum voting power 1.
@@ -305,7 +305,7 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
 
     /// Returns round proposers
     pub fn get_round_proposers(&self) -> Option<HashMap<u64, Vec<AccountAddress>>> {
-        self.round_to_validators.clone()
+        self.round_to_proposers.clone()
     }
 
     /// Returns an ordered list of account addresses as an `Iterator`.

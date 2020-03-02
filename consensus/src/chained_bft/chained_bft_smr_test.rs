@@ -197,35 +197,68 @@ impl SMRNode {
         nodes
     }
 
-    // Returns a vector of nodes created, and a mapping between node index
-    // and corresponding twin index (twins are included in the nodes vector)
+    // Starts num_nodes and target_nodes.len() twins
+    // Returns:
+    // (1) A vector of nodes created, and
+    // (2) A mapping between node index and corresponding twin index
+    //     (twins are included in the nodes vector)
     fn start_num_nodes_with_twins(
         num_nodes: usize,
-        // Index #s of nodes (i.e. target nodes) for which we will create twins
+        // Indices of nodes (i.e. target nodes) for which we will create twins
         target_nodes: &Vec<usize>,
         quorum_voting_power: u64,
         playground: &mut NetworkPlayground,
         proposer_type: ConsensusProposerType,
         executor_with_reconfig: bool,
+        // Leaders per round
         twins_round_proposers_idx: HashMap<Round, Vec<usize>>,
+        // The indices at which twins will be created
         node_to_twin: HashMap<usize, usize>
     ) -> (Vec<Self>, HashMap<usize, usize>) {
+
+
+        // ======================================
+        // Generate 'ValidatorSigner' and 'ValidatorVerifier'
+        // ======================================
+
+        // ValidatorSigner --> is a struct that has node's
+        // account address, public and private keys. "Signers" is a
+        // vector of "ValidatorSigner" for each node.
+        // "Signers" is passed to "SMRNode::start()" to start SMR nodes
+        // with certain account addresses and public and private keys
+        //
+        // ValidatorVerifier --> is a struct that includes total voting
+        // power, quorum voting power, and a hashmap "address_to_validator_info"
+        // that maps account addresses of all nodes to public key and
+        // voting power (wrapped in a struct "ValidatorInfo").
+        // "ValidatorVerifier" supports validation of signatures for
+        // known authors with individual voting powers. This struct
+        // can be used for all signature verification operations
+        // including block and network signature verification.
+        // "ValidatorVerifier" is also used by consensus to send
+        // messages to nodes, (see "consensus/src/chained_bft/network.rs")
         let (mut signers, mut validator_verifier) =
             random_validator_verifier(num_nodes, Some(quorum_voting_power), true);
+
+        // ======================================
+        // Add twins to 'ValidatorSigner' and 'ValidatorVerifier'
+        // ======================================
 
         // Vector of twins
         let mut twins: Vec<ValidatorSigner> = vec![];
 
-        // Starting index for twin account addresses. This will
-        // appear in logs. I chose 240 (hex: f0), so twins will appear as
-        // "f0" onwards in logs
+        // Starting index for twin account addresses (this will appear in
+        // logs). We choose 240 (hex: f0), so twins will appear as "f0"
+        // onwards in logs
         let mut twin_account_index = 240;
 
-        // Add twins to 'signers' and 'validator verifier'
         for ref_target_node in target_nodes {
             let target_node = *ref_target_node;
 
+            // -----------------------------------------
             // Clone the target node and add to vector of twins
+            // -----------------------------------------
+
             twins.push(signers[target_node].clone());
 
             // Index of the newly added twin
@@ -234,12 +267,16 @@ impl SMRNode {
             // The twin should be equal to the target node, at this point
             assert_eq!(twins[twins_top], signers[target_node]);
 
+            // -----------------------------------------
             // Change the twin's account address to "twin_account_address"
+            // -----------------------------------------
+
             // Explanation: At the consensus layer routing decisions are
             // made based on account addresses (see relevant functions in
             // "consensus/src/chained_bft/network.rs" such as "send_vote"
             // and "broadcast" -- they all use author, which is the same as an
             // account address, to identify the destination node of a message)
+
             let mut twin_address = [0; ADDRESS_LENGTH];
             // Usually account address is hash of node's public key, but for
             // testing we generate account addresses that are more readable.
@@ -254,26 +291,18 @@ impl SMRNode {
             // The twin should be NOT equal to the target node, at this point
             assert_ne!(twins[twins_top], signers[target_node]);
 
+            // -----------------------------------------
             // Update "signers", so the newly created twin is included
-            // Explanation: "ValidatorSigner" is a struct that has node's
-            // account address, public and private keys. "Signers" is a
-            // vector of "ValidatorSigner" for each node.
-            // "Signers" is passed to "SMRNode::start()" to start SMR nodes
-            // with certain account addresses and public and private keys
+            // -----------------------------------------
+
             signers.push(twins[twins_top].clone());
+
+            // -----------------------------------------
             // Also update "validator_verifier", i.e. add twin to its
-            // "address_to_validator_info"
-            // Explanation: ValidatorVerifier is a struct that includes
-            // total voting power, quorum voting power, and a hashmap
-            // "address_to_validator_info" that maps account addresses
-            // of all nodes to public key and voting power (wrapped in
-            // a struct "ValidatorInfo").
-            // "ValidatorVerifier" supports validation of signatures for
-            // known authors with individual voting powers. This struct
-            // can be used for all signature verification operations
-            // including block and network signature verification.
-            // "ValidatorVerifier" is also used by consensus to send
-            // messages to nodes, (see "consensus/src/chained_bft/network.rs")
+            // "address_to_validator_info". Twin will have its own
+            // 'twin_account_address', but keys of 'target_account_address'
+            // -----------------------------------------
+
             let target_account_address = signers[target_node].author();
             ValidatorVerifier::add_to_address_to_validator_info(
                 &mut validator_verifier,
@@ -281,6 +310,10 @@ impl SMRNode {
                 &target_account_address
             );
         }
+
+        // ======================================
+        // Set leaders per round
+        // ======================================
 
         // A map that tells who is the proposer(s) per round
         // Note: If no proposer is defined for a round, we default to the first node
@@ -306,15 +339,26 @@ impl SMRNode {
             );
         }
 
+        ValidatorVerifier::set_round_to_proposers(&mut validator_verifier, twins_round_proposers);
 
-
-        ValidatorVerifier::set_round_to_validators(&mut validator_verifier, twins_round_proposers);
+        // =======================
+        // Set validators
+        // =======================
 
         let validator_set = if executor_with_reconfig {
             Some((&validator_verifier).into())
         } else {
             None
         };
+
+        let validators = Arc::new(validator_verifier);
+
+
+        // ====================
+        // Start nodes
+        // ====================
+
+        let mut nodes = vec![];
 
         // Some tests make assumptions about the ordering of configs in relation
         // to the FixedProposer which should be the first proposer in lexical order.
@@ -340,6 +384,10 @@ impl SMRNode {
                 executor_validator_set.clone(),
             ));
         }
+
+        // =================
+        // Start twins
+        // =================
 
         // Adding twins
         let count_twins = twins.len();
@@ -368,98 +416,35 @@ impl SMRNode {
         }
 
         (nodes, node_to_twin)
->>>>>>> 66928da8... Minor fix & run cargo fmt
     }
 }
 
-fn verify_finality_proof(node: &SMRNode, ledger_info_with_sig: &LedgerInfoWithSignatures) {
-    let validators = ValidatorVerifier::from(&node.storage.shared_storage.validator_set);
-    let ledger_info_hash = ledger_info_with_sig.ledger_info().hash();
-    for (author, signature) in ledger_info_with_sig.signatures() {
-        assert_eq!(
-            Ok(()),
-            validators.verify_signature(*author, ledger_info_hash, &signature)
-        );
-    }
-}
+
+// =======================
+// Twins tests
+// =======================
+>>>>>>> 2141ac72... Tidy up
 
 #[test]
-/// Should receive a new proposal upon start
-fn basic_start_test() {
-    let runtime = consensus_runtime();
-    let mut playground = NetworkPlayground::new(runtime.handle().clone());
-    let nodes = SMRNode::start_num_nodes(2, &mut playground, RotatingProposer, false);
-    let genesis = nodes[0]
-        .smr
-        .block_store()
-        .expect("No valid block store!")
-        .root();
-    block_on(async move {
-        let msg = playground
-            .wait_for_messages(1, NetworkPlayground::proposals_only::<TestPayload>)
-            .await;
-        let first_proposal = match &msg[0].1 {
-            ConsensusMsg::ProposalMsg(proposal) => proposal,
-            _ => panic!("Unexpected message found"),
-        };
-        assert_eq!(first_proposal.proposal().parent_id(), genesis.id());
-        assert_eq!(
-            first_proposal
-                .proposal()
-                .quorum_cert()
-                .certified_block()
-                .id(),
-            genesis.id()
-        );
-    });
-}
-
-#[test]
-/// Upon startup, the first proposal is sent, delivered and voted by all the participants.
-fn start_with_proposal_test() {
-    let runtime = consensus_runtime();
-    let mut playground = NetworkPlayground::new(runtime.handle().clone());
-    let nodes = SMRNode::start_num_nodes(2, &mut playground, RotatingProposer, false);
-
-    block_on(async move {
-        let _proposals = playground
-            .wait_for_messages(1, NetworkPlayground::proposals_only::<TestPayload>)
-            .await;
-        // Need to wait for 2 votes for the 2 replicas
-        let votes: Vec<VoteMsg> = playground
-            .wait_for_messages(2, NetworkPlayground::votes_only::<TestPayload>)
-            .await
-            .into_iter()
-            .map(|(_, msg)| match msg {
-                ConsensusMsg::VoteMsg(vote_msg) => *vote_msg,
-                _ => panic!("Unexpected message found"),
-            })
-            .collect();
-        let proposed_block_id = votes[0].vote().vote_data().proposed().id();
-
-        // Verify that the proposed block id is indeed present in the block store.
-        assert!(nodes[0]
-            .smr
-            .block_store()
-            .unwrap()
-            .get_block(proposed_block_id)
-            .is_some());
-        assert!(nodes[1]
-            .smr
-            .block_store()
-            .unwrap()
-            .get_block(proposed_block_id)
-            .is_some());
-    });
-}
-
-#[test]
-/// Upon startup, the first proposal is sent, delivered and voted by all the nodes and twins.
-fn twins_start_with_proposal_test() {
+/// This test checks that when a node and its twin are both leaders for a round,
+/// only one of the two proposals gets a QC
+///
+/// Setup:
+///
+/// Network of 2 nodes (n0, n1), and their twins (twin0, twin1)
+/// Quorum voting power: 3
+///
+/// Test:
+///
+/// Let n0 and twin0 propose a block in round1
+/// Pull out enough votes so a QC can be formed
+/// Check that the QC of n0 and twin0 matches
+///
+fn twins_QC_test() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.executor());
 
-    let num_nodes =2;
+    let num_nodes= 2;
 
     // Index #s of nodes (i.e. target nodes) for which we will create twins
     let mut target_nodes = vec![];
@@ -481,18 +466,13 @@ fn twins_start_with_proposal_test() {
         );
     }
 
-
     // Specify round leaders here
     // Will default to the first node, if no leader specified for given round
     let mut twins_round_proposers_idx: HashMap<Round, Vec<usize>> = HashMap::new();
-
-    twins_round_proposers_idx.insert(1, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
-
-    twins_round_proposers_idx.insert(2, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
-
-    twins_round_proposers_idx.insert(3, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
-
-    twins_round_proposers_idx.insert(4, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
+    // Leaders are n0 and twin1 for round 1..4
+    for i in 1..5 {
+        twins_round_proposers_idx.insert(i, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
+    }
 
     // Start a network with 2 nodes and 2 twins for those nodes
     let (nodes, node_to_twin) = SMRNode::start_num_nodes_with_twins(
@@ -515,24 +495,20 @@ fn twins_start_with_proposal_test() {
         .signer
         .author();
 
-    // Drop messages from node1 and twin_node1 to node0
-    //playground.drop_message_for_round(n1,  n0, 1);
-    //playground.drop_message_for_round(twin1,  n0, 1);
 
     block_on(async move {
-        // Two proposals (by node0 and twin_node0)
+        // Two proposals (by n0 and twin0)
         let _proposals = playground
             .wait_for_messages(2, NetworkPlayground::proposals_only)
             .await;
 
-        // Need to wait for 4 votes for the 2 replicas plus their twins
+        // Pull out enough votes so a QC can be formed
         let votes: Vec<VoteMsg> = playground
-            .wait_for_messages(8, NetworkPlayground::votes_only)
+            .wait_for_messages(6, NetworkPlayground::votes_only)
             .await
             .into_iter()
             .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
             .collect();
-        //let proposed_block_id = votes[0].vote().vote_data().proposed().id();
 
         // Twin leader's HQC
         let hqc_twin0 = nodes[3]
@@ -542,32 +518,45 @@ fn twins_start_with_proposal_test() {
                 .highest_quorum_cert();
 
         // Any other nodes' HQC
-        let hqc_node1 = nodes[1]
+        let hqc_node0 = nodes[0]
             .smr
             .block_store()
             .unwrap()
             .highest_quorum_cert();
 
-        println!("");
 
         // Proposal from node0 and twin_node0 are going to race
         // but only one of them will form QC because quorum voting
-        // power is set to 3
-        assert_eq!(hqc_twin0, hqc_node1);
+        // power is set to 3, so ultimately they'll have the same QC
+        assert_eq!(hqc_twin0, hqc_node0);
 
     });
 }
 
 
 #[test]
-/// Upon startup, the first proposal is sent, delivered and voted by all the nodes and twins
-/// except node 01 because it has been added to drop_config for round 1 and does not hear
-/// the proposal from node 0.
+/// Checks that DropConfigRound (filter rules per round) works for twins
+///
+/// Setup:
+/// Network with 2 nodes (n0, n1) and their twins (twin0, twin1)
+/// Leader for each round is n0
+/// Quorum voting power: 2
+///
+/// Test:
+/// Round 1: Drop messages between n0 and n1. Check that the proposed
+///          block is in everyone else's block store except n1
+///
+/// Round2: There is no filtering rule. Check that the proposed
+///         block is in everyone else's block store
+///
+/// Round3: Drop messages between n0 and (n1, twin0, twin1). Check that
+///         the proposed block is in no one's block store except n0
+///
 fn twins_drop_config_round_test() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.executor());
 
-    let num_nodes =2;
+    let num_nodes = 2;
 
     // Index #s of nodes (i.e. target nodes) for which we will create twins
     let mut target_nodes = vec![];
@@ -589,16 +578,9 @@ fn twins_drop_config_round_test() {
         );
     }
 
-
     // Specify round leaders here
     // Will default to the first node, if no leader specified for given round
     let mut twins_round_proposers_idx: HashMap<Round, Vec<usize>> = HashMap::new();
-
-    twins_round_proposers_idx.insert(1, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
-
-    twins_round_proposers_idx.insert(2, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
-
-    twins_round_proposers_idx.insert(3, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
 
     let (nodes, node_to_twin) = SMRNode::start_num_nodes_with_twins(
         num_nodes,
@@ -623,17 +605,67 @@ fn twins_drop_config_round_test() {
     // Filters
 
     playground.drop_message_for_round(n0, n1, 1);
-    playground.drop_message_for_round(n0, n1, 3);
+    // No filtering rule in round 2
     playground.drop_message_for_round(n0, twin0, 3);
+    playground.drop_message_for_round(n0, twin1, 3);
 
     block_on(async move {
+
         // ===== Round 1 ======
 
         let _proposals = playground
             .wait_for_messages(1, NetworkPlayground::proposals_only)
             .await;
 
-        // Need to wait for 3 votes (from the 1 of the 2 replicas, and twins)
+        // Need to wait for 2 votes (from the twins)
+        let votes: Vec<VoteMsg> = playground
+            .wait_for_messages(2, NetworkPlayground::votes_only)
+            .await
+            .into_iter()
+            .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
+            .collect();
+        let proposed_block_id = votes[0].vote().vote_data().proposed().id();
+
+        // Verify that the proposed block id is indeed present in the block store
+        // of n0, twin0 and twin1
+        assert!(nodes[0]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_some());
+
+        assert!(nodes[2]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_some());
+
+        assert!(nodes[3]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_some());
+
+        // n1 does not have the block id because it did not receive the proposal from n0
+        assert!(nodes[1]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_none());
+
+
+
+        // ========= Round 2 =========
+
+        let _proposals = playground
+            .wait_for_messages(1, NetworkPlayground::proposals_only)
+            .await;
+
+        // Need to wait for 3 votes (from n1, and the twins)
         let votes: Vec<VoteMsg> = playground
             .wait_for_messages(3, NetworkPlayground::votes_only)
             .await
@@ -642,26 +674,29 @@ fn twins_drop_config_round_test() {
             .collect();
         let proposed_block_id = votes[0].vote().vote_data().proposed().id();
 
-        // Verify that the proposed block id is indeed present in the block store.
+        // Verify that the proposed block id is indeed present in the block store
+        // of n0, n1, twin0 and twin1
         assert!(nodes[0]
             .smr
             .block_store()
             .unwrap()
             .get_block(proposed_block_id)
             .is_some());
-        // node 1 does not have the block id because it did not receive the proposal from node 0
+
         assert!(nodes[1]
             .smr
             .block_store()
             .unwrap()
             .get_block(proposed_block_id)
-            .is_none());
+            .is_some());
+
         assert!(nodes[2]
             .smr
             .block_store()
             .unwrap()
             .get_block(proposed_block_id)
             .is_some());
+
         assert!(nodes[3]
             .smr
             .block_store()
@@ -669,46 +704,7 @@ fn twins_drop_config_round_test() {
             .get_block(proposed_block_id)
             .is_some());
 
-        // ========= Round 2 =========
-        let _proposals = playground
-            .wait_for_messages(1, NetworkPlayground::proposals_only)
-            .await;
 
-        // Need to wait for 4 votes (from the 2 replicas, and their twins)
-        let votes: Vec<VoteMsg> = playground
-            .wait_for_messages(4, NetworkPlayground::votes_only)
-            .await
-            .into_iter()
-            .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
-            .collect();
-        let proposed_block_id = votes[0].vote().vote_data().proposed().id();
-
-        // Verify that the proposed block id is indeed present in the block store.
-        assert!(nodes[0]
-            .smr
-            .block_store()
-            .unwrap()
-            .get_block(proposed_block_id)
-            .is_some());
-        // node 1 should now have the block id because it's not in drop_config in round 2
-        assert!(nodes[1]
-            .smr
-            .block_store()
-            .unwrap()
-            .get_block(proposed_block_id)
-            .is_some());
-        assert!(nodes[2]
-            .smr
-            .block_store()
-            .unwrap()
-            .get_block(proposed_block_id)
-            .is_some());
-        assert!(nodes[3]
-            .smr
-            .block_store()
-            .unwrap()
-            .get_block(proposed_block_id)
-            .is_some());
 
         // ===== Round 3 ======
 
@@ -716,63 +712,69 @@ fn twins_drop_config_round_test() {
             .wait_for_messages(1, NetworkPlayground::proposals_only)
             .await;
 
-        // Need to wait for 1 vote
+        // Need to wait for 1 vote from n1
         let votes: Vec<VoteMsg> = playground
             .wait_for_messages(1, NetworkPlayground::votes_only)
             .await
             .into_iter()
             .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
             .collect();
+
         let proposed_block_id = votes[0].vote().vote_data().proposed().id();
 
-        // Verify that the proposed block id is indeed present in the block store.
+        // Verify that the proposed block id is present in the block store of n0
         assert!(nodes[0]
             .smr
             .block_store()
             .unwrap()
             .get_block(proposed_block_id)
             .is_some());
-        // node 1 does not have the block id because it did not receive the proposal from node 0
+
+        // Verify that the proposed block id is present in the block store of n1
         assert!(nodes[1]
             .smr
             .block_store()
             .unwrap()
             .get_block(proposed_block_id)
-            .is_none());
-        // twin 0 does not have the block id because it did not receive the proposal from node 0
+            .is_some());
+
+        // twin0 should not have the block id because it did not receive the proposal from n0
         assert!(nodes[2]
             .smr
             .block_store()
             .unwrap()
             .get_block(proposed_block_id)
             .is_none());
-        // twin 1 does not have the block id because it did not receive the proposal from node 0
+
+        // twin1 should not have the block id because it did not receive the proposal from n0
         assert!(nodes[3]
             .smr
             .block_store()
             .unwrap()
             .get_block(proposed_block_id)
-            .is_some());
+            .is_none());
+
     });
 }
 
+
 #[test]
-/// node 0 and its twin (twin 0) are both leader, and we split
-/// the network as follows:
-///      partition 1: node 0, node 1, node 2
-///      partition 2: twin 0, twin 1, node 3
+/// Checks that split_network works for twins
 ///
-/// The purpose of this test is to create a safety violation;
-/// n2 commits the block proposed by node 0, and node 3 commits
-/// the block proposed by twin 0.
+/// Setup:
+/// Creates a network of 2 nodes (node0 and node1) and 2 twins (twin0 and twin1).
+/// Quorum voting power is 2
+/// Each round has node0 as the leader.
+/// Creates a network partition between (node0, node1) and (twin0 and twin1)
 ///
-/// run the test:
-/// cargo xtest -p consensus twins_test_simple_safety_attack -- --nocapture
-fn twins_test_simple_safety_attack() {
+/// Test: node0 sends a proposal, which reaches node0 and node1.
+/// Check that the block is present in the store of node0 and node1,
+/// and should not be present in the store of twin0 and twin1.
+fn twins_split_network_test() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.executor());
 
-    let num_nodes =4;
+    let num_nodes = 2;
 
     // Index #s of nodes (i.e. target nodes) for which we will create twins
     let mut target_nodes = vec![];
@@ -794,20 +796,14 @@ fn twins_test_simple_safety_attack() {
         );
     }
 
-
     // Specify round leaders here
     // Will default to the first node, if no leader specified for given round
     let mut twins_round_proposers_idx: HashMap<Round, Vec<usize>> = HashMap::new();
 
-    twins_round_proposers_idx.insert(1, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
-
-    twins_round_proposers_idx.insert(2, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
-
-    twins_round_proposers_idx.insert(3, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
     let (nodes, node_to_twin) = SMRNode::start_num_nodes_with_twins(
         /* num_nodes */ num_nodes,
         &mut target_nodes,
-        /* quorum_voting_power */ 3,
+        /* quorum_voting_power */ 2,
         &mut playground,
         RoundProposers, //FixedProposer,
         /* executor_with_reconfig */ false,
@@ -815,38 +811,35 @@ fn twins_test_simple_safety_attack() {
         node_to_twin
     );
 
-    let n0 = nodes[0].signer.author();
-    let n1 = nodes[1].signer.author();
-    let twin0 = nodes[node_to_twin.get(&0).unwrap().to_owned()]
-        .signer
-        .author();
-    let twin1 = nodes[node_to_twin.get(&1).unwrap().to_owned()]
-        .signer
-        .author();
-    let n2 = nodes[2].signer.author();
-    let n3 = nodes[3].signer.author();
-
-    // `Create static netwok partitions`
-    playground.split_network(vec![&n0, &n1, &n2], vec![&twin0, &twin1, &n3]);
-
     block_on(async move {
+        let n0 = &nodes[0].signer.author();
+        let n1 = &nodes[1].signer.author();
+        let twin0 = &nodes[2].signer.author();
+        let twin1 = &nodes[3].signer.author();
+
+        // Proposals from node0 will never reach twin0 and twin1
+        playground.split_network(vec![n0, n1], vec![twin0, twin1]);
+        // playground.stop_split_network(vec![n0, n1], vec![twin0, twin1]);
+
         let _proposals = playground
             .wait_for_messages(1, NetworkPlayground::proposals_only)
             .await;
 
-        // Pull enough votes to get a commit on the first block)
-        // The proposer's votes are implicit and do not go in the queue.
+        // Need to wait for 2 votes from node0 and node1
         let votes: Vec<VoteMsg> = playground
-            .wait_for_messages(23, NetworkPlayground::votes_only)
+            .wait_for_messages(2, NetworkPlayground::votes_only)
             .await
             .into_iter()
             .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
             .collect();
         let proposed_block_id = votes[0].vote().vote_data().proposed().id();
 
-        /*
-        // Verify that the proposed block id is indeed present in the
-        // block store of replicas and their twins.
+        let _proposals = playground
+            .wait_for_messages(3, NetworkPlayground::proposals_only)
+            .await;
+
+        // Verify that the proposed block id is indeed present in the block store
+        // of node0 and node1
         assert!(nodes[0]
             .smr
             .block_store()
@@ -859,97 +852,133 @@ fn twins_test_simple_safety_attack() {
             .unwrap()
             .get_block(proposed_block_id)
             .is_some());
+
+        // The proposed block id should not be present in the block store
+        // of twin0 and twin1
         assert!(nodes[2]
             .smr
             .block_store()
             .unwrap()
             .get_block(proposed_block_id)
-            .is_some());
-
-        // Check that all nodes of partition 1 have the same QC.
-        let commit_info_parition_1 = nodes[0]
+            .is_none());
+        assert!(nodes[3]
             .smr
             .block_store()
             .unwrap()
-            .highest_quorum_cert()
-            .commit_info()
-            .id();
-        assert_eq!(
-            nodes[1]
-                .smr
-                .block_store()
-                .unwrap()
-                .highest_quorum_cert()
-                .commit_info()
-                .id(),
-            commit_info_parition_1
-        );
-        assert_eq!(
-            nodes[2]
-                .smr
-                .block_store()
-                .unwrap()
-                .highest_quorum_cert()
-                .commit_info()
-                .id(),
-            commit_info_parition_1
-        );
+            .get_block(proposed_block_id)
+            .is_none());
+    });
+}
 
-        // Check that all nodes in partition 2 have the same QC
-        let commit_info_parition_2 = nodes[3]
-            .smr
-            .block_store()
-            .unwrap()
-            .highest_quorum_cert()
-            .commit_info()
-            .id();
-        assert_eq!(
-            nodes[4] // twin 0
-                .smr
-                .block_store()
-                .unwrap()
-                .highest_quorum_cert()
-                .commit_info()
-                .id(),
-            commit_info_parition_2
-        );
-        assert_eq!(
-            nodes[5] // twin 1
-                .smr
-                .block_store()
-                .unwrap()
-                .highest_quorum_cert()
-                .commit_info()
-                .id(),
-            commit_info_parition_2
-        );
 
-        // Show that the QC of the nodes in parition 1 and partition 2 are different
-        assert_ne!(commit_info_parition_1, commit_info_parition_2);
+#[test]
+/// This test demonstrates safety violation with f+1 twins
+///
+/// Setup:
+///
+/// 4 honest nodes (n0, n1, n2, n3), and 2 twins (twin0, twin1)
+///
+/// Leader: For each round n0 and its twin (twin0) are both leaders
+///
+/// Quorum voting power: 2
+///
+/// We split the network as follows:
+///      partition 1: node 0, node 1, node 2
+///      partition 2: twin 0, twin 1, node 3
+///
+/// Test:
+///
+/// The purpose of this test is to create a safety violation;
+/// n2 commits the block proposed by node 0, and n3 commits
+/// the block proposed by twin0.
+///
+/// Run the test:
+/// cargo xtest -p consensus twins_safety_violation_test -- --nocapture
+fn twins_safety_violation_test() {
+    let runtime = consensus_runtime();
+    let mut playground = NetworkPlayground::new(runtime.executor());
 
-        // Show that the QC of all nades are on the same round
-        let commit_round_partition_1 = nodes[0]
-            .smr
-            .block_store()
-            .unwrap()
-            .highest_quorum_cert()
-            .certified_block()
-            .round();
-        let commit_round_partition_2 = nodes[3]
-            .smr
-            .block_store()
-            .unwrap()
-            .highest_quorum_cert()
-            .certified_block()
-            .round();
-        assert_eq!(commit_round_partition_1, commit_round_partition_2);
-        */
+    let num_nodes = 4;
+
+    // Index #s of nodes (i.e. target nodes) for which we will create twins
+    let mut target_nodes = vec![];
+    target_nodes.push(0);
+    target_nodes.push(1);
+
+    // This helps us map target nodes (for which we will create twins)
+    // to corresponding twin indices in 'nodes'. For example, we get
+    // twin for nodes[1] as follows:  nodes[node_to_twin.get(1)]
+    // Similarly we can access entries for twins in other collections like
+    // 'signers' and 'validator_verifier' by using this map
+    let mut node_to_twin: HashMap<usize, usize> = HashMap::new();
+    for (each, target) in target_nodes.iter().enumerate() {
+        let twin_index = num_nodes + each;
+        node_to_twin.insert(*target, twin_index);
+        debug!(
+            "[Twins] Will create Twin for node {0} at index {1}",
+            *target, twin_index
+        );
+    }
+
+    // Specify round leaders here
+    // Will default to the first node, if no leader specified for given round
+    let mut twins_round_proposers_idx: HashMap<Round, Vec<usize>> = HashMap::new();
+
+    // Make n0 and twin0 leaders for round 1..29
+    for i in 1..30 {
+        twins_round_proposers_idx.insert(i, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
+    }
+
+    let (nodes, node_to_twin) = SMRNode::start_num_nodes_with_twins(
+        /* num_nodes */ num_nodes,
+        &mut target_nodes,
+        /* quorum_voting_power */ 3,
+        &mut playground,
+        RoundProposers,
+        /* executor_with_reconfig */ false,
+        twins_round_proposers_idx,
+        node_to_twin
+    );
+
+    // 4 honest nodes
+    let n0 = nodes[0].signer.author();
+    let n1 = nodes[1].signer.author();
+    let n2 = nodes[2].signer.author();
+    let n3 = nodes[3].signer.author();
+    // twin of n0
+    let twin0 = nodes[node_to_twin.get(&0).unwrap().to_owned()]
+        .signer
+        .author();
+    // twin of n1
+    let twin1 = nodes[node_to_twin.get(&1).unwrap().to_owned()]
+        .signer
+        .author();
+
+
+    // Create static network partition
+    playground.split_network(vec![&n0, &n1, &n2], vec![&twin0, &twin1, &n3]);
+
+    block_on(async move {
+        let _proposals = playground
+            .wait_for_messages(2, NetworkPlayground::proposals_only)
+            .await;
+
+        // Pull enough votes to get a commit on the first block)
+        // The proposer's votes are implicit and do not go in the queue.
+        let votes: Vec<VoteMsg> = playground
+            .wait_for_messages(18, NetworkPlayground::votes_only)
+            .await
+            .into_iter()
+            .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
+            .collect();
+
+        // =================
+        // Check if the tree of commits across the two partitions matches
+        // =================
 
         let mut all_branches: Vec<Vec<Arc<ExecutedBlock<TestPayload>>>> = Vec::new();
 
-        // =================
         // Branch for node 0
-        // =================
 
         let branch_head0 = nodes[0]
             .smr
@@ -968,9 +997,8 @@ fn twins_test_simple_safety_attack() {
 
         all_branches.push(branch0);
 
-        // =================
+
         // Branch for node 1
-        // =================
 
         let branch_head1 = nodes[1]
             .smr
@@ -989,9 +1017,7 @@ fn twins_test_simple_safety_attack() {
 
         all_branches.push(branch1);
 
-        // =================
         // Branch for node 2
-        // =================
 
         let branch_head2 = nodes[2]
             .smr
@@ -1011,9 +1037,7 @@ fn twins_test_simple_safety_attack() {
         all_branches.push(branch2);
 
 
-        // =================
         // Branch for node 3
-        // =================
 
         let branch_head3 = nodes[3]
             .smr
@@ -1032,9 +1056,7 @@ fn twins_test_simple_safety_attack() {
 
         all_branches.push(branch3);
 
-        // =================
         // Branch for node 4
-        // =================
 
         let branch_head4 = nodes[4]
             .smr
@@ -1053,9 +1075,7 @@ fn twins_test_simple_safety_attack() {
 
         all_branches.push(branch4);
 
-        // =================
         // Branch for node 5
-        // =================
 
         let branch_head5 = nodes[5]
             .smr
@@ -1074,10 +1094,11 @@ fn twins_test_simple_safety_attack() {
 
         all_branches.push(branch5);
 
-
+        // Now check if the branches match at all heights
         assert!(!is_safe(all_branches));
     });
 }
+
 
 
 fn create_partitions(
@@ -1095,6 +1116,14 @@ fn is_safe(branches: Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>) -> bool {
     compare_vectors(&branches)
 }
 
+// This function compares vectors (of possibly different lengths) at each index
+//
+// The vectors are equal if they match at each (available) index
+//
+// There is a conflict at index i if the value at index i is not uniform
+//          (or absent) across all the vectors. Values at conflicting index
+//          will be printed out
+
 fn compare_vectors(vecs: &Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>) -> bool {
 
     // how many vectors need to be compared
@@ -1109,7 +1138,7 @@ fn compare_vectors(vecs: &Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>) -> bool {
         print!("\n");
     }
 
-    let (longest_idx,longest_len)=longest_vector(vecs);
+    let (longest_idx,longest_len) = longest_vector(vecs);
     //println!("Longest vector is at idx {0} with len {1}: {2:?}", longest_idx, longest_len, vecs[longest_idx]);
 
     let mut is_conflict = false;
@@ -1122,6 +1151,7 @@ fn compare_vectors(vecs: &Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>) -> bool {
 
         // in the vectors to be compared
         for vec in vecs.iter() {
+
             // Only compare if the index being compared exists
             // (because some vectors might be shorter than the longest)
             if i < vec.len() {
@@ -1146,6 +1176,8 @@ fn compare_vectors(vecs: &Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>) -> bool {
 }
 
 
+// This function takes a vector of vectors, and for each vector it prints
+// out the values at the given conflicting index
 fn print_conflict(vecs: &Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>, index: usize) {
 
     println!("CONFLICT: Index {0} doesn't match, values are:", index);
@@ -1397,30 +1429,76 @@ fn twins_test_safety_attack_generator() {
     println!("Number of test cases: {:?}", count);
 }
 
+
+
+
+
+// ===============================
+// Regular (i.e. non-Twins) tests
+// ===============================
+
+fn verify_finality_proof(node: &SMRNode, ledger_info_with_sig: &LedgerInfoWithSignatures) {
+    let validators = ValidatorVerifier::from(&node.storage.shared_storage.validator_set);
+    let ledger_info_hash = ledger_info_with_sig.ledger_info().hash();
+    for (author, signature) in ledger_info_with_sig.signatures() {
+        assert_eq!(
+            Ok(()),
+            validators.verify_signature(*author, ledger_info_hash, &signature)
+        );
+    }
+}
+
+#[test]
+/// Should receive a new proposal upon start
+fn basic_start_test() {
+    let runtime = consensus_runtime();
+    let mut playground = NetworkPlayground::new(runtime.handle().clone());
+    let nodes = SMRNode::start_num_nodes(2, &mut playground, RotatingProposer, false);
+    let genesis = nodes[0]
+        .smr
+        .block_store()
+        .expect("No valid block store!")
+        .root();
+    block_on(async move {
+        let msg = playground
+            .wait_for_messages(1, NetworkPlayground::proposals_only::<TestPayload>)
+            .await;
+        let first_proposal = match &msg[0].1 {
+            ConsensusMsg::ProposalMsg(proposal) => proposal,
+            _ => panic!("Unexpected message found"),
+        };
+        assert_eq!(first_proposal.proposal().parent_id(), genesis.id());
+        assert_eq!(
+            first_proposal
+                .proposal()
+                .quorum_cert()
+                .certified_block()
+                .id(),
+            genesis.id()
+        );
+    });
+}
+
 #[test]
 /// Upon startup, the first proposal is sent, delivered and voted by all the participants.
-fn twinsless_partition_start_stop_test() {
+fn start_with_proposal_test() {
     let runtime = consensus_runtime();
-    let mut playground = NetworkPlayground::new(runtime.executor());
-    let nodes = SMRNode::start_num_nodes(2, 2, &mut playground, FixedProposer, false);
+    let mut playground = NetworkPlayground::new(runtime.handle().clone());
+    let nodes = SMRNode::start_num_nodes(2, &mut playground, RotatingProposer, false);
 
     block_on(async move {
-        let n0 = &nodes[0].signer.author();
-        let n1 = &nodes[1].signer.author();
-
         let _proposals = playground
-            .wait_for_messages(1, NetworkPlayground::proposals_only)
+            .wait_for_messages(1, NetworkPlayground::proposals_only::<TestPayload>)
             .await;
-
-        playground.split_network(vec![n0], vec![n1]);
-        playground.stop_split_network(vec![n0], vec![n1]);
-
         // Need to wait for 2 votes for the 2 replicas
         let votes: Vec<VoteMsg> = playground
-            .wait_for_messages(20, NetworkPlayground::votes_only)
+            .wait_for_messages(2, NetworkPlayground::votes_only::<TestPayload>)
             .await
             .into_iter()
-            .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
+            .map(|(_, msg)| match msg {
+                ConsensusMsg::VoteMsg(vote_msg) => *vote_msg,
+                _ => panic!("Unexpected message found"),
+            })
             .collect();
         let proposed_block_id = votes[0].vote().vote_data().proposed().id();
 
@@ -1440,199 +1518,6 @@ fn twinsless_partition_start_stop_test() {
     });
 }
 
-#[test]
-/// Upon startup, the first proposal is sent, delivered and voted by all the participants.
-fn twinsless_block_proposal_test() {
-    let runtime = consensus_runtime();
-    let mut playground = NetworkPlayground::new(runtime.executor());
-    let nodes = SMRNode::start_num_nodes(2, 2, &mut playground, FixedProposer, false);
-
-    block_on(async move {
-        let n0 = &nodes[0].signer.author();
-        let n1 = &nodes[1].signer.author();
-        playground.split_network(vec![n0], vec![n1]);
-
-        // The messages below are never delivered
-        // Expected to hang
-
-        let _proposals = playground
-            .wait_for_messages(1, NetworkPlayground::proposals_only)
-            .await;
-
-        // Need to wait for 2 votes for the 2 replicas
-        let votes: Vec<VoteMsg> = playground
-            .wait_for_messages(20, NetworkPlayground::votes_only)
-            .await
-            .into_iter()
-            .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
-            .collect();
-        let proposed_block_id = votes[0].vote().vote_data().proposed().id();
-
-        // Verify that the proposed block id is indeed present in the block store.
-        assert!(nodes[0]
-            .smr
-            .block_store()
-            .unwrap()
-            .get_block(proposed_block_id)
-            .is_some());
-        assert!(nodes[1]
-            .smr
-            .block_store()
-            .unwrap()
-            .get_block(proposed_block_id)
-            .is_some());
-    });
-}
-
-#[test]
-/// Upon startup, the first proposal is sent, delivered and voted by all the participants.
-fn twinsless_block_vote_test() {
-    let runtime = consensus_runtime();
-    let mut playground = NetworkPlayground::new(runtime.executor());
-    let nodes = SMRNode::start_num_nodes(2, 2, &mut playground, FixedProposer, false);
-
-    block_on(async move {
-        let n0 = &nodes[0].signer.author();
-        let n1 = &nodes[1].signer.author();
-
-        let _proposals = playground
-            .wait_for_messages(1, NetworkPlayground::proposals_only)
-            .await;
-
-        playground.split_network(vec![n0], vec![n1]);
-
-        // The messages below are never delivered
-        // Expected to hang
-
-        // Need to wait for 2 votes for the 2 replicas
-        let votes: Vec<VoteMsg> = playground
-            .wait_for_messages(20, NetworkPlayground::votes_only)
-            .await
-            .into_iter()
-            .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
-            .collect();
-        let proposed_block_id = votes[0].vote().vote_data().proposed().id();
-
-        // Verify that the proposed block id is indeed present in the block store.
-        assert!(nodes[0]
-            .smr
-            .block_store()
-            .unwrap()
-            .get_block(proposed_block_id)
-            .is_some());
-        assert!(nodes[1]
-            .smr
-            .block_store()
-            .unwrap()
-            .get_block(proposed_block_id)
-            .is_some());
-    });
-}
-
-#[test]
-/// Upon startup, the first proposal is sent, delivered and voted by all the participants.
-fn twins_test() {
-    let runtime = consensus_runtime();
-    let mut playground = NetworkPlayground::new(runtime.executor());
-    let nodes = SMRNode::start_num_nodes(2, 2, &mut playground, FixedProposer, false);
-
-    block_on(async move {
-        let n0 = &nodes[0].signer.author();
-        let n1 = &nodes[1].signer.author();
-        let twin0 = &nodes[2].signer.author();
-        let twin1 = &nodes[3].signer.author();
-        playground.split_network(vec![n0, n1], vec![twin0, twin1]);
-        playground.stop_split_network(vec![n0, n1], vec![twin0, twin1]);
-
-        // The messages below are never delivered
-        // Expected to hang
-
-        let _proposals = playground
-            .wait_for_messages(1, NetworkPlayground::proposals_only)
-            .await;
-
-        // Need to wait for 2 votes for the 2 replicas
-        let votes: Vec<VoteMsg> = playground
-            .wait_for_messages(4, NetworkPlayground::votes_only)
-            .await
-            .into_iter()
-            .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
-            .collect();
-        let proposed_block_id = votes[0].vote().vote_data().proposed().id();
-
-        // Verify that the proposed block id is indeed present in the block store.
-        assert!(nodes[0]
-            .smr
-            .block_store()
-            .unwrap()
-            .get_block(proposed_block_id)
-            .is_some());
-        assert!(nodes[1]
-            .smr
-            .block_store()
-            .unwrap()
-            .get_block(proposed_block_id)
-            .is_some());
-        assert!(nodes[2]
-            .smr
-            .block_store()
-            .unwrap()
-            .get_block(proposed_block_id)
-            .is_some());
-        assert!(nodes[3]
-            .smr
-            .block_store()
-            .unwrap()
-            .get_block(proposed_block_id)
-            .is_some());
-    });
-}
-
-#[test]
-/// Upon startup, the first proposal is sent, delivered and voted by all the participants.
-fn twins_block_proposal_test() {
-    let runtime = consensus_runtime();
-    let mut playground = NetworkPlayground::new(runtime.executor());
-    let nodes = SMRNode::start_num_nodes(2, 2, &mut playground, FixedProposer, false);
-
-    block_on(async move {
-        let n0 = &nodes[0].signer.author();
-        let n1 = &nodes[1].signer.author();
-        let twin0 = &nodes[2].signer.author();
-        let twin1 = &nodes[3].signer.author();
-        playground.split_network(vec![n0, n1], vec![twin0, twin1]);
-
-        // The messages below are never delivered
-        // Expected to hang
-
-        let _proposals = playground
-            .wait_for_messages(1, NetworkPlayground::proposals_only)
-            .await;
-
-        // Need to wait for 2 votes for the 2 replicas
-        let votes: Vec<VoteMsg> = playground
-            .wait_for_messages(4, NetworkPlayground::votes_only)
-            .await
-            .into_iter()
-            .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
-            .collect();
-        let proposed_block_id = votes[0].vote().vote_data().proposed().id();
-
-        // Verify that the proposed block id is indeed present in the block store.
-        assert!(nodes[2]
-            .smr
-            .block_store()
-            .unwrap()
-            .get_block(proposed_block_id)
-            .is_none());
-        assert!(nodes[3]
-            .smr
-            .block_store()
-            .unwrap()
-            .get_block(proposed_block_id)
-            .is_none());
-    });
-}
 
 fn basic_full_round(
     num_nodes: usize,
@@ -2029,6 +1914,7 @@ fn basic_state_sync() {
         playground
             .wait_for_messages(3, NetworkPlayground::votes_only::<TestPayload>)
             .await;
+
         playground
             .wait_for_messages(3, NetworkPlayground::proposals_only::<TestPayload>)
             .await;
@@ -2366,5 +2252,90 @@ fn reconfiguration_test() {
                 }
             }
         }
+    });
+}
+
+#[test]
+/// Setup:
+/// Start a network with 3 nodes and quorum voting power of 2
+/// The leader is node0 (FixedProposer)
+/// Test:
+/// Create a partition between node0 and node1
+/// Let node0 send a proposal
+/// Check that the proposed block is not available in the store of node1
+/// Remove the previously created partition between node0 and node1
+/// Let node0 send a proposal
+/// Check that the proposed block is available in the store of node1
+fn network_partition_start_stop_test() {
+    let runtime = consensus_runtime();
+    let mut playground = NetworkPlayground::new(runtime.executor());
+    let nodes = SMRNode::start_num_nodes(3, 2, &mut playground, FixedProposer, false);
+
+    block_on(async move {
+        let n0 = &nodes[0].signer.author();
+        let n1 = &nodes[1].signer.author();
+
+        playground.split_network(vec![n0], vec![n1]);
+
+        let _proposals = playground
+            .wait_for_messages(1, NetworkPlayground::proposals_only)
+            .await;
+
+        // Need to wait for 2 votes for the 2 replicas (node0 and node2)
+        let votes: Vec<VoteMsg> = playground
+            .wait_for_messages(2, NetworkPlayground::votes_only)
+            .await
+            .into_iter()
+            .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
+            .collect();
+        let proposed_block_id = votes[0].vote().vote_data().proposed().id();
+
+        // Verify that the proposed block id is present in the block store of node0
+        assert!(nodes[0]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_some());
+
+        // Verify that the proposed block id is NOT present in the block store of node1
+        assert!(nodes[1]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_none());
+
+        // Undo the split
+        playground.stop_split_network(vec![n0], vec![n1]);
+
+        let _proposals2 = playground
+            .wait_for_messages(1, NetworkPlayground::proposals_only)
+            .await;
+
+        // Need to wait for 2 votes for the 2 replicas node0 and node1
+        let votes2: Vec<VoteMsg> = playground
+            .wait_for_messages(3, NetworkPlayground::votes_only)
+            .await
+            .into_iter()
+            .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
+            .collect();
+        let proposed_block_id2 = votes2[0].vote().vote_data().proposed().id();
+
+        // Verify that the proposed block id is present in the block store of node0
+        assert!(nodes[0]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id2)
+            .is_some());
+
+        // Verify that the proposed block id is present in the block store of node1
+        assert!(nodes[1]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id2)
+            .is_some());
     });
 }
