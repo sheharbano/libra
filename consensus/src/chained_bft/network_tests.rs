@@ -330,6 +330,28 @@ impl NetworkPlayground {
             .unwrap()
             .stop_drop_message_for(src, dst)
     }
+
+    pub fn split_network(&mut self, src: Vec<&Author>, dst: Vec<&Author>) -> bool {
+      let mut ret = true;
+      for i in 0..src.len() {
+          for j in 0..dst.len() {
+              ret &= self.drop_message_for(src[i], *dst[j]);
+              ret &= self.drop_message_for(dst[i], *src[j]);
+          }
+      }
+      ret
+  }
+
+  pub fn stop_split_network(&mut self, src: Vec<&Author>, dst: Vec<&Author>) -> bool {
+      let mut ret = true;
+      for i in 0..src.len() {
+          for j in 0..dst.len() {
+              ret &= self.stop_drop_message_for(src[i], dst[j]);
+              ret &= self.stop_drop_message_for(dst[i], src[j]);
+          }
+      }
+      ret
+  }
 }
 
 struct DropConfig(HashMap<Author, HashSet<Author>>);
