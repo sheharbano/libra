@@ -291,8 +291,7 @@ impl SMRNode {
             ValidatorVerifier::add_to_address_to_validator_info(
                 &mut validator_verifier,
                 twin_account_address.clone(),
-                &target_account_address,
-                quorum_voting_power.clone(),
+                &target_account_address
             );
         }
 
@@ -317,6 +316,7 @@ impl SMRNode {
         */
 
 
+        // Leader for round 1: node0 and twin_node0
         twins_round_proposers.insert(
             1,
             vec![
@@ -324,6 +324,7 @@ impl SMRNode {
                 signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
             ],
         );
+        // Leader for round 2: node0 and twin_node0
         twins_round_proposers.insert(
             2,
             vec![
@@ -331,6 +332,7 @@ impl SMRNode {
                 signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
             ],
         );
+        // Leader for round 3: node0 and twin_node0
         twins_round_proposers.insert(
             3,
             vec![
@@ -338,6 +340,7 @@ impl SMRNode {
                 signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
             ],
         );
+        // Leader for round 4: node0 and twin_node0
         twins_round_proposers.insert(
             4,
             vec![
@@ -502,10 +505,11 @@ fn twins_start_with_proposal_test() {
     target_nodes.push(0);
     target_nodes.push(1);
 
+    // Start a network with 2 nodes and 2 twins for those nodes
     let (nodes, node_to_twin) = SMRNode::start_num_nodes_with_twins(
         2,
         &mut target_nodes,
-        2,
+        3,
         &mut playground,
         RoundProposers,
         false,
@@ -520,66 +524,45 @@ fn twins_start_with_proposal_test() {
         .signer
         .author();
 
+    // Drop messages from node1 and twin_node1 to node0
     //playground.drop_message_for_round(n1,  n0, 1);
     //playground.drop_message_for_round(twin1,  n0, 1);
 
     block_on(async move {
+        // Two proposals (by node0 and twin_node0)
         let _proposals = playground
             .wait_for_messages(2, NetworkPlayground::proposals_only)
             .await;
 
         // Need to wait for 4 votes for the 2 replicas plus their twins
         let votes: Vec<VoteMsg> = playground
-            .wait_for_messages(4, NetworkPlayground::votes_only)
+            .wait_for_messages(8, NetworkPlayground::votes_only)
             .await
             .into_iter()
             .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
             .collect();
-        let proposed_block_id = votes[0].vote().vote_data().proposed().id();
+        //let proposed_block_id = votes[0].vote().vote_data().proposed().id();
 
-        println!(
-            "*********** The ID of HQC is ***********: {0}",
-            nodes[0]
+        // Twin leader's HQC
+        let hqc_twin0 = nodes[3]
                 .smr
                 .block_store()
                 .unwrap()
-                .highest_quorum_cert()
-                .certified_block()
-                .id()
-        );
+                .highest_quorum_cert();
 
-        /*
-        let _proposals = playground
-            .wait_for_messages(1, NetworkPlayground::proposals_only)
-            .await;
-            */
+        // Any other nodes' HQC
+        let hqc_node1 = nodes[1]
+            .smr
+            .block_store()
+            .unwrap()
+            .highest_quorum_cert();
 
-        // Verify that the proposed block id is indeed present in the
-        // block store of replicas and their twins.
-        assert!(nodes[0]
-            .smr
-            .block_store()
-            .unwrap()
-            .get_block(proposed_block_id)
-            .is_some());
-        assert!(nodes[1]
-            .smr
-            .block_store()
-            .unwrap()
-            .get_block(proposed_block_id)
-            .is_some());
-        assert!(nodes[2]
-            .smr
-            .block_store()
-            .unwrap()
-            .get_block(proposed_block_id)
-            .is_some());
-        assert!(nodes[3]
-            .smr
-            .block_store()
-            .unwrap()
-            .get_block(proposed_block_id)
-            .is_some());
+
+        // Proposal from node0 and twin_node0 are going to race
+        // but only one of them will form QC because quorum voting
+        // power is set to 3
+        assert_eq!(hqc_twin0, hqc_node1);
+
     });
 }
 

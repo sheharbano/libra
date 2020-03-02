@@ -117,6 +117,7 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
             assume!(sum <= u64::max_value() - x.voting_power);
             sum + x.voting_power
         });
+
         ensure!(
             quorum_voting_power <= total_voting_power,
             "Quorum voting power is greater than the sum of all voting power of authors: {}, \
@@ -124,7 +125,6 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
             quorum_voting_power,
             total_voting_power
         );
-        */
 
         Ok(ValidatorVerifier {
             address_to_validator_info,
@@ -138,8 +138,7 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
     pub fn add_to_address_to_validator_info(
         &mut self,
         account_address: AccountAddress,
-        &target_account_address: &AccountAddress,
-        quorum_voting_power: u64,
+        &target_account_address: &AccountAddress
     ) {
         let validator_info: Option<&ValidatorInfo<PublicKey>> =
             self.address_to_validator_info.get(&target_account_address);
@@ -150,7 +149,7 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
                 let public_key = info.public_key.to_owned();
                 self.address_to_validator_info.insert(
                     account_address,
-                    ValidatorInfo::new(public_key, quorum_voting_power),
+                    ValidatorInfo::new(public_key, 1),
                 );
             }
         }
@@ -266,7 +265,17 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
         let mut aggregated_voting_power = 0;
         for account_address in authors {
             match self.get_voting_power(&account_address) {
-                Some(voting_power) => aggregated_voting_power += voting_power,
+                Some(voting_power) => {
+                    aggregated_voting_power += voting_power;
+
+                    /*
+                    println!("======================");
+                    println!("Author: {0}, Voting Power: {1}, Aggregated Voting Power: {2}, \
+                    Quorum Voting Power: {3}", account_address, voting_power,
+                             aggregated_voting_power, self.quorum_voting_power);
+                    println!("======================");
+                    */
+                },
                 None => return Err(VerifyError::UnknownAuthor),
             }
         }
@@ -305,6 +314,7 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
         // is guaranteed to be sorted.
         self.address_to_validator_info.keys().copied()
     }
+
 
     /// Returns the number of authors to be validated.
     pub fn len(&self) -> usize {
