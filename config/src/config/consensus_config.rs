@@ -44,4 +44,7 @@ pub enum ConsensusProposerType {
     RotatingProposer,
     // Multiple ordered proposers per round (primary, secondary, etc.)
     MultipleOrderedProposers,
+    // Pre-specified mapping between rounds and proposers
+    // (defaults to the first validator if there's no proposer for a round)
+    RoundProposers,
 }

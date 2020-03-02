@@ -43,6 +43,8 @@ use libra_types::account_address::AccountAddress;
 
 use consensus_types::common::Round;
 use std::collections::HashMap;
+use libra_config::config::ConsensusProposerType::RoundProposers;
+use libra_logger::prelude::*;
 
 /// Auxiliary struct that is preparing SMR for the test
 struct SMRNode {
@@ -173,7 +175,7 @@ impl SMRNode {
     fn start_num_nodes_with_twins(
         num_nodes: usize,
         // Index #s of nodes (i.e. target nodes) for which we will create twins
-        target_nodes: &mut Vec<usize>,
+        target_nodes: &Vec<usize>,
         quorum_voting_power: u64,
         playground: &mut NetworkPlayground,
         proposer_type: ConsensusProposerType,
@@ -192,8 +194,8 @@ impl SMRNode {
         for (each, target) in target_nodes.iter().enumerate() {
             let twin_index = num_nodes + each;
             node_to_twin.insert(*target, twin_index);
+            debug!("[Twins] Will create Twin for node {0} at index {1}", *target, twin_index);
         }
-
 
         // Vector of twins
         let mut twins: Vec<ValidatorSigner> = vec![];
@@ -204,9 +206,9 @@ impl SMRNode {
         let mut twin_account_index = 240;
 
         // Add twins to 'signers' and 'validator verifier'
-        for ref_target_node in target_nodes.clone() {
+        for ref_target_node in target_nodes {
 
-            let target_node = ref_target_node;
+            let target_node = *ref_target_node;
 
             // Clone the target node and add to vector of twins
             twins.push(signers[target_node].clone());
@@ -221,7 +223,7 @@ impl SMRNode {
             // Explanation: At the consensus layer routing decisions are
             // made based on account addresses (see relevant functions in
             // "consensus/src/chained_bft/network.rs" such as "send_vote"
-            // and broadcast -- they all use author, which is the same as an
+            // and "broadcast" -- they all use author, which is the same as an
             // account address, to identify the destination node of a message)
             let mut twin_address = [0; ADDRESS_LENGTH];
             // Usually account address is hash of node's public key, but for
@@ -239,9 +241,9 @@ impl SMRNode {
 
             // Update "signers", so the newly created twin is included
             // Explanation: "ValidatorSigner" is a struct that has node's
-            // account address, public and private keys. Signers is a
+            // account address, public and private keys. "Signers" is a
             // vector of "ValidatorSigner" for each node.
-            // Signer is passed to "SMRNode::start()" to start SMR nodes
+            // "Signers" is passed to "SMRNode::start()" to start SMR nodes
             // with certain account addresses and public and private keys
             signers.push(twins[twins_top].clone());
             // Also update "validator_verifier", i.e. add twin to its
@@ -261,7 +263,7 @@ impl SMRNode {
             ValidatorVerifier::add_to_address_to_validator_info(
                 &mut validator_verifier,
                 twin_account_address.clone(),
-                target_account_address.clone(),
+                &target_account_address,
                 quorum_voting_power.clone()
             );
         }
@@ -271,29 +273,30 @@ impl SMRNode {
         // Note: If no proposer is defined for a round, we default to the first node
         let mut twins_round_proposers: HashMap<Round, Vec<AccountAddress>> = HashMap::new();
         // TODO: Read this from an input file eventually
-        let mut leader_authors = Vec::new();
-        leader_authors.push(signers[0].author());
-        twins_round_proposers.insert(0,leader_authors.clone() );
+        twins_round_proposers.insert(
+            0,
+            vec![signers[0].author()]
+        );
 
-        leader_authors.clear();
-        leader_authors.push(signers[1].author());
-        twins_round_proposers.insert(1,leader_authors.clone() );
+        twins_round_proposers.insert(
+            2,
+            vec![signers[1].author()]
+             );
 
-        // Make {the twin of node 0} proposer
-        let mut twin_index = node_to_twin[&0];
-        leader_authors.clear();
-        leader_authors.push(signers[twin_index].author());
-        twins_round_proposers.insert(2,leader_authors );
-        //twins_round_proposers.insert(3,[&1]);
-        //twins_round_proposers.insert(4,[&0]);
+        // Make node 0 and {the twin of node 0} both proposers
+        twins_round_proposers.insert(
+            1,
+            vec![signers[0].author(),
+                signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
+            ]
+        );
 
-
-        //println!("===========\nsigners[0]: {:?}",signers[0]);
 
         ValidatorVerifier::set_round_to_validators(
             &mut validator_verifier,
             twins_round_proposers,
         );
+
 
         let validator_set = if executor_with_reconfig {
             Some((&validator_verifier).into())
@@ -429,13 +432,20 @@ fn twins_start_with_proposal_test() {
     target_nodes.push(0);
     target_nodes.push(1);
 
-    let (nodes, node_to_twin) = SMRNode::start_num_nodes_with_twins(2, &mut target_nodes, 2, &mut playground, FixedProposer, false);
+    let (nodes, node_to_twin) =
+        SMRNode::start_num_nodes_with_twins(
+            2,
+            &mut target_nodes,
+            2,
+            &mut playground,
+            RoundProposers,
+            false);
 
     // println!("=============\nnode_to_twin: {:?}",node_to_twin);
 
     block_on(async move {
         let _proposals = playground
-            .wait_for_messages(1, NetworkPlayground::proposals_only)
+            .wait_for_messages(3, NetworkPlayground::proposals_only)
             .await;
         // Need to wait for 2 votes for the 2 replicas
         let votes: Vec<VoteMsg> = playground

@@ -13,6 +13,7 @@ use crate::crypto_proxies::ValidatorSigner;
 
 use std::collections::HashMap;
 
+
 /// Errors possible during signature verification.
 #[derive(Debug, Error, PartialEq)]
 pub enum VerifyError {
@@ -137,14 +138,14 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
     pub fn add_to_address_to_validator_info(
         &mut self,
         account_address: AccountAddress,
-        target_account_address: AccountAddress,
+        &target_account_address: &AccountAddress,
         quorum_voting_power: u64
     )
     {
         let validator_info: Option<&ValidatorInfo<PublicKey>> = self.address_to_validator_info.get(&target_account_address);
 
         match validator_info {
-            None => println!("Failed!"),
+            None => println!("[Twins] Error: Could not add Twin to ValidatorVerifier"),
             Some(info) => {
                 let public_key = info.public_key.to_owned();
                 self.address_to_validator_info.insert(account_address, ValidatorInfo::new(public_key, quorum_voting_power));
@@ -158,7 +159,6 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
         round_to_validators_map: HashMap<u64, Vec<AccountAddress>>
     )
     {
-        //println!("============\nround_to_validators_map: {:?}",round_to_validators_map);
         self.round_to_validators = Some(round_to_validators_map);
     }
 
