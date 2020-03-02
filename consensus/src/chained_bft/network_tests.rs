@@ -294,6 +294,10 @@ impl NetworkPlayground {
             node_consensus_tx.send(msg_notif).await.unwrap();
             delivered = true;
         }
+        else {
+            println!("Dropping message {0} -> {1} in Round {2}?",src, dst, round );
+        }
+
         (delivered, msg_copy)
     }
 

@@ -125,6 +125,8 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
             quorum_voting_power,
             total_voting_power
         );
+        */
+
         Ok(ValidatorVerifier {
             address_to_validator_info,
             quorum_voting_power,

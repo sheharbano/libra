@@ -80,6 +80,7 @@ impl StateComputer for MockStateComputer {
         Ok(())
     }
 
+
     async fn sync_to(&self, commit: LedgerInfoWithSignatures) -> Result<()> {
         debug!(
             "{}Fake sync{} to block id {}",

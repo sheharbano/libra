@@ -272,8 +272,9 @@ impl SMRNode {
         // Note: If no proposer is defined for a round, we default to the first node
         let mut twins_round_proposers: HashMap<Round, Vec<AccountAddress>> = HashMap::new();
         // TODO: Read this from an input file eventually
+        // FIXME: Specify round proposers here
 
-        // Make node 0 and {the twin of node 0} both proposers
+
         twins_round_proposers.insert(
             2,
             vec![signers[0].author(),
@@ -431,7 +432,7 @@ fn twins_start_with_proposal_test() {
         SMRNode::start_num_nodes_with_twins(
             2,
             &mut target_nodes,
-            2,
+            4,
             &mut playground,
             RoundProposers,
             false);
@@ -441,6 +442,10 @@ fn twins_start_with_proposal_test() {
     let n1 = nodes[1].signer.author();
     let twin0 = nodes[node_to_twin.get(&0).unwrap().to_owned()].signer.author();
     let twin1 = nodes[node_to_twin.get(&1).unwrap().to_owned()].signer.author();
+
+
+    playground.drop_message_for_round(n1,  n0, 1);
+    playground.drop_message_for_round(twin1,  n0, 1);
 
     block_on(async move {
         let _proposals = playground
@@ -455,6 +460,20 @@ fn twins_start_with_proposal_test() {
             .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
             .collect();
         let proposed_block_id = votes[0].vote().vote_data().proposed().id();
+
+        println!("*********** The ID of HQC is ***********: {0}",nodes[0]
+            .smr
+            .block_store()
+            .unwrap()
+            .highest_quorum_cert()
+            .certified_block()
+            .id());
+
+        /*
+        let _proposals = playground
+            .wait_for_messages(1, NetworkPlayground::proposals_only)
+            .await;
+            */
 
         // Verify that the proposed block id is indeed present in the
         // block store of replicas and their twins.

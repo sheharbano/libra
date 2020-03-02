@@ -553,6 +553,8 @@ impl<T: Payload> EventProcessor<T> {
                 nil_block
             }
         };
+        // Bano: This function checks the two voting conditions related to
+        // last voted round and preferred round
         self.execute_and_vote(block).await
     }
 
@@ -594,6 +596,7 @@ impl<T: Payload> EventProcessor<T> {
         Ok(())
     }
 
+    // Bano
     /// This function processes a proposal that was chosen as a representative of its round:
     /// 1. Add it to a block store.
     /// 2. Try to vote for it following the safety rules.
@@ -610,6 +613,8 @@ impl<T: Payload> EventProcessor<T> {
 
         let proposal_round = proposal.round();
 
+        // Bano: This function checks the two voting conditions related to
+        // last voted round and preferred round
         let vote = match self.execute_and_vote(proposal).await {
             Err(e) => {
                 warn!("{:?}", e);
@@ -706,6 +711,7 @@ impl<T: Payload> EventProcessor<T> {
         )
     }
 
+    // Bano
     /// The function generates a VoteMsg for a given proposed_block:
     /// * first execute the block and add it to the block store
     /// * then verify the voting rules
@@ -754,6 +760,8 @@ impl<T: Payload> EventProcessor<T> {
 
         let vote = self
             .safety_rules
+            // Bano: This function checks the two voting conditions related to
+            // last voted round and preferred round
             .construct_and_sign_vote(&vote_proposal)
             .with_context(|| format!("{}Rejected{} {}", Fg(Red), Fg(Reset), block))?;
 
