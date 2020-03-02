@@ -1500,14 +1500,15 @@ fn twins_test_safety_attack_generator() {
     const PARTITIONS_PICK_N: usize = 5; // How many partitions to pick from all possible partition scenarios
                                          // (assuming there are more "all possible partition scenarios" than
                                          // the number of rounds. This is a filtering mechanism essentially.)
-    const PICK_PARTITIONS_PARAM: usize = 2; // parameter to select partitions:
-                                            //     0: piik the first n partitions (not at random)
-                                            //     1: randomly pick partitions without repetitions
-                                            //     2: randomly pick partitions with repetition
-    const WITH_REPLACEMENT: bool = false; // whether to pick n partitions with replacement
-    const IS_DRY_RUN: bool = false; // Don't execute scenarios, just print stats
+    const PICK_PARTITIONS_PARAM: usize = 2; // Parameter to select partitions:
+                                            //     0: Pick the first n partitions (not at random)
+                                            //     1: Randomly pick partitions without repetitions
+                                            //     2: Randomly pick partitions with repetition
+    const WITH_REPLACEMENT: bool = false; // Whether to permute partition scenarios (and corresponding leader)
+    //                                    // over R rounds *with replacement*
+    const IS_DRY_RUN: bool = false; // If true will not execute scenarios, just print stats
 
-    let f = ((NUM_OF_NODES - 1) / 3) +1;
+    let f = (NUM_OF_NODES - 1) / 3;
 
     let quorum_voting_power: u64 = (NUM_OF_NODES - f) as u64;
 
