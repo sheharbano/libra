@@ -1459,35 +1459,29 @@ fn test_filter_partitions() {
 fn filter_partitions_pick_n(
     list_of_partitions: &mut Vec<Vec<Vec<usize>>>,
     n: usize,
-    pick_randomly: bool
+    parameter: usize
 ) {
-    if n < list_of_partitions.len() {
-        let mut rng = rand::thread_rng();
-
-        let mut dice = rng.gen_range(0, list_of_partitions.len());
-
-        let mut seen = Vec::new();
-
-        // Filter list_of_partitions so it only contains n randomly selected partitions
-        if pick_randomly {
+    match parameter {
+        0 => list_of_partitions.truncate(n),
+        1 | 2 => {
+            let mut rng = rand::thread_rng();
+            let mut dice = rng.gen_range(0, list_of_partitions.len());
+            let mut seen = Vec::new();
             // Pick n random indices, copy their value to beginning of list_of_partitions
             // and truncate rest of list_of_partitions
             for i in 0..n {
-
                 list_of_partitions[i] = list_of_partitions[dice].clone();
-
-                seen.push(dice);
-
+                if parameter == 1 {
+                    seen.push(dice);
+                }
                 // Repeatedly roll the dice until we get an unseen value
                 while seen.contains(&dice) {
                     dice = rng.gen_range(0, list_of_partitions.len());
                 }
             }
-        }
-        // else if !pick_randomly just filter list_of_partitions so it only
-        // contains the first n partitions
-
-        list_of_partitions.truncate(n);
+            list_of_partitions.truncate(n);
+        },
+        _ => assert!(false) // never reached
     }
 }
 
@@ -1503,16 +1497,18 @@ fn twins_test_safety_attack_generator() {
     const PARTITIONS_PICK_N: usize = 5; // How many partitions to pick from all possible partition scenarios
                                          // (assuming there are more "all possible partition scenarios" than
                                          // the number of rounds. This is a filtering mechanism essentially.)
-    const PICK_PARTITIONS_RANDOMLY: bool = false; // Specifies whether to pick PARTITIONS_PICK_N randomly
-    const WITH_REPLACEMENT: bool = false; // Whether to permute partition scenarios (and corresponding leader)
-    //                                    // over R rounds *with replacement*
-    const IS_DRY_RUN: bool = false; // If true will not execute scenarios, just print stats
-
-    //let f = (NUM_OF_NODES - 1) / 3;
+    const PICK_PARTITIONS_PARAM: usize = 2; // parameter to select partitions:
+                                            //     0: piik the first n partitions (not at random)
+                                            //     1: randomly pick partitions without repetitions
+                                            //     2: randomly pick partitions with repetition
+    const WITH_REPLACEMENT: bool = false; // whether to pick n partitions with replacement
+    const IS_DRY_RUN: bool = false; // Don't execute scenarios, just print stats
 
     let f = ((NUM_OF_NODES - 1) / 3) +1;
 
     let quorum_voting_power: u64 = (NUM_OF_NODES - f) as u64;
+
+    assert!(PARTITIONS_PICK_N*f >= NUM_OF_ROUNDS);
 
     // =============================================
     //
@@ -1600,7 +1596,7 @@ fn twins_test_safety_attack_generator() {
     filter_partitions_pick_n(
         &mut partition_scenarios,
         PARTITIONS_PICK_N,
-        PICK_PARTITIONS_RANDOMLY
+        PICK_PARTITIONS_PARAM
     );
 
     println!(
@@ -1680,7 +1676,7 @@ fn twins_test_safety_attack_generator() {
     // calculate "permutations with replacement". We decided not to do that
     // for now to limit the number of test cases
     //
-    assert!(partition_scenarios_with_leaders.len() >= NUM_OF_ROUNDS);
+    assert!(partition_scenarios_with_leaders.len() >= NUM_OF_ROUNDS); // never reached
 
     let test_cases = partition_scenarios_with_leaders
         .iter()
