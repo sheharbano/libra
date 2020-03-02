@@ -123,7 +123,7 @@ impl<T: Payload> TSafetyRules<T> for SafetyRules<T> {
     /// @TODO verify epoch on vote proposal
     fn construct_and_sign_vote(&mut self, vote_proposal: &VoteProposal<T>) -> Result<Vote, Error> {
         let proposed_block = vote_proposal.block();
-
+        
         if proposed_block.round() <= self.persistent_storage.last_voted_round()? {
             return Err(Error::OldProposal {
                 proposal_round: proposed_block.round(),
