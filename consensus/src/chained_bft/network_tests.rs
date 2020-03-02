@@ -70,7 +70,7 @@ pub struct NetworkPlayground {
     /// Allow test code to drop direct-send messages between peers.
     drop_config: Arc<RwLock<DropConfig>>,
     /// Allow test code to drop direct-send messages between peers per round.
-    // drop_config_round: Arc<RwLock<DropConfigRound>>,
+    drop_config_round: Arc<RwLock<DropConfigRound>>,
     /// An executor for spawning node outbound network event handlers
     executor: Handle,
 }
@@ -84,7 +84,7 @@ impl NetworkPlayground {
             outbound_msgs_tx,
             outbound_msgs_rx,
             drop_config: Arc::new(RwLock::new(DropConfig(HashMap::new()))),
-            //drop_config_round: Arc::new(RwLock::new(DropConfigRound(HashMap::new()))),
+            drop_config_round: Arc::new(RwLock::new(DropConfigRound(HashMap::new()))),
             executor,
         }
     }
@@ -99,7 +99,7 @@ impl NetworkPlayground {
     /// they don't block.
     async fn start_node_outbound_handler(
         drop_config: Arc<RwLock<DropConfig>>,
-        //drop_config_round: Arc<RwLock<DropConfigRound>>,
+        drop_config_round: Arc<RwLock<DropConfigRound>>,
         src: Author,
         mut network_reqs_rx: libra_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>,
         mut outbound_msgs_tx: mpsc::Sender<(Author, PeerManagerRequest)>,
@@ -182,7 +182,7 @@ impl NetworkPlayground {
 
         let fut1 = NetworkPlayground::start_node_outbound_handler(
             Arc::clone(&self.drop_config),
-            //Arc::clone(&self.drop_config_round),
+            Arc::clone(&self.drop_config_round),
             author,
             network_reqs_rx,
             self.outbound_msgs_tx.clone(),
@@ -287,8 +287,7 @@ impl NetworkPlayground {
         // println!("======== Round is {0} =========", round);
 
         let mut delivered = false;
-        //if(!self.is_message_dropped_round(src.clone(), dst.clone(), round)) {
-        if(true) {
+        if(!self.is_message_dropped_round(src.clone(), dst.clone(), round)) {
             node_consensus_tx.send(msg_notif).await.unwrap();
             delivered = true;
         }
@@ -387,25 +386,21 @@ impl NetworkPlayground {
     }
 
 
-    /*
-    fn is_message_dropped_round(&self, src: Author, dst: Author, msg: ConsensusMsg) -> bool {
+    fn is_message_dropped_round(&self, src: Author, dst: Author, round: u64) -> bool {
         self.drop_config_round
             .read()
             .unwrap()
-            .is_message_dropped(src, dst, msg)
+            .is_message_dropped(src, dst, round)
     }
-    */
 
 
     pub fn drop_message_for(&mut self, src: &Author, dst: Author) -> bool {
         self.drop_config.write().unwrap().drop_message_for(src, dst)
     }
 
-    /*
     pub fn drop_message_for_round(&mut self, src: Author, dst: Author, round: u64) -> bool {
         self.drop_config_round.write().unwrap().drop_message_for(src, dst, round)
     }
-    */
 
     pub fn stop_drop_message_for(&mut self, src: &Author, dst: &Author) -> bool {
         self.drop_config
@@ -460,6 +455,58 @@ impl DropConfig {
     fn add_node(&mut self, src: Author) {
         self.0.insert(src, HashSet::new());
     }
+}
+
+// Per round DropConfig
+struct DropConfigRound(HashMap<u64, DropConfig>);
+
+impl DropConfigRound {
+
+    pub fn is_message_dropped(&self, src: Author, dst: Author, round: u64) -> bool {
+        let mut result = false;
+
+        if(self.0.contains_key(&round)) {
+            let drop_config = self.0.get(&round).unwrap();
+
+            if (drop_config.0.contains_key(&src)) {
+                result = drop_config.0.get(&src).unwrap().contains(&dst);
+            }
+        }
+        result
+    }
+
+    pub fn drop_message_for(&mut self, src: Author, dst: Author, round: u64) -> bool {
+        // self.print();
+        if (!self.0.contains_key(&round)) {
+            let mut drop_config = DropConfig(HashMap::new());
+            self.0.insert(round, drop_config);
+        }
+
+        if(!self.0.get_mut(&round).unwrap().0.contains_key(&src)) {
+            self.0.get_mut(&round).unwrap().add_node(src);
+        }
+
+        self.0.get_mut(&round).unwrap().0.get_mut(&src).unwrap().insert(dst)
+
+    }
+
+    pub fn print(&mut self) {
+        for val in self.0.iter() {
+            println!("Round is {0} and DropConfig is {1:?} ", val.0, (val.1).0);
+            println!("========================");
+        }
+    }
+
+    /*
+    pub fn stop_drop_message_for(&mut self, src: &Author, dst: &Author, round: u64) -> bool {
+        self.0.get_mut(src).unwrap().remove(dst)
+    }
+
+    fn add_node(&mut self, src: Author, round: u64) {
+        self.0.insert(src, HashSet::new());
+    }
+    */
+
 }
 
 
