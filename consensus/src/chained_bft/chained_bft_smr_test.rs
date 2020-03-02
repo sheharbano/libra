@@ -1207,6 +1207,8 @@ fn execute_scenario(
         &node_to_twin,
     );
 
+    let num_of_rounds = round_partitions_idx.len();
+
     // Create partitions
 
     let mut round_partitions: HashMap<u64, Vec<Vec<AccountAddress>>> = HashMap::new();
@@ -1246,7 +1248,7 @@ fn execute_scenario(
         // Pull enough votes to get a commit on the first block)
         // The proposer's votes are implicit and do not go in the queue.
         let votes: Vec<VoteMsg> = playground
-            .wait_for_messages(40, NetworkPlayground::votes_only)
+            .wait_for_messages(num_nodes*num_of_rounds, NetworkPlayground::votes_only)
             .await
             .into_iter()
             .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
@@ -1448,7 +1450,7 @@ fn filter_partitions_pick_n(list_of_partitions: &mut Vec<Vec<Vec<usize>>>, n: us
 /// run:
 /// cargo xtest -p consensus twins_test_safety_attack_generator -- --nocapture
 fn twins_test_safety_attack_generator() {
-    const NUM_OF_ROUNDS: usize = 5; // Play with this parameter
+    const NUM_OF_ROUNDS: usize = 4; // Play with this parameter
     const NUM_OF_NODES: usize = 4; // Play with this parameter
     const NUM_OF_PARTITIONS: usize = 2; // Play with this parameter
     const PARTITIONS_PICK_N : usize = 6; // How many partitions to pick from all possible partition scenarios
