@@ -12,6 +12,7 @@ use std::convert::TryFrom;
 /// signing, respectively.
 #[derive(Debug)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(Clone))]
+#[derive(Eq, PartialEq)]
 pub struct ValidatorSigner<PrivateKey: SigningKey> {
     author: AccountAddress,
     public_key: PrivateKey::VerifyingKeyMaterial,
@@ -50,10 +51,17 @@ impl<PrivateKey: SigningKey> ValidatorSigner<PrivateKey> {
         self.public_key.clone()
     }
 
+
     /// Returns the private key associated with this signer. Only available for testing purposes.
     #[cfg(any(test, feature = "fuzzing"))]
     pub fn private_key(&self) -> &PrivateKey {
         &self.private_key
+    }
+
+    pub fn set_account_address(&mut self, account_address: AccountAddress) {
+        println!("Hello World from validator signer. BEFORE: Account address is {0:?}", self.author);
+        self.author = account_address;
+        println!("Hello World from validator signer. AFTER: Account address is {0:?}", self.author);
     }
 }
 

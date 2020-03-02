@@ -1,6 +1,8 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use libra_types::account_address::ADDRESS_LENGTH;
+
 use crate::{
     chained_bft::{
         block_storage::BlockReader,
@@ -25,11 +27,19 @@ use libra_config::{
     },
     generator::{self, ValidatorSwarm},
 };
+
 use libra_crypto::{hash::CryptoHash, HashValue};
 use libra_mempool::mocks::MockSharedMempool;
 use libra_types::crypto_proxies::{LedgerInfoWithSignatures, ValidatorSet, ValidatorVerifier};
 use network::peer_manager::conn_status_channel;
 use std::{num::NonZeroUsize, sync::Arc};
+
+// Bano: Check if these are needed
+use safety_rules::OnDiskStorage;
+use std::{convert::TryFrom, path::PathBuf, sync::Arc, time::Duration};
+use tempfile::NamedTempFile;
+use tokio::runtime;
+use libra_types::account_address::AccountAddress;
 
 /// Auxiliary struct that is preparing SMR for the test
 struct SMRNode {
@@ -121,6 +131,7 @@ impl SMRNode {
         proposer_type: ConsensusProposerType,
         executor_with_reconfig: bool,
     ) -> Vec<Self> {
+
         let ValidatorSwarm {
             mut nodes,
             validator_set,
@@ -238,6 +249,13 @@ fn start_with_proposal_test() {
             .unwrap()
             .get_block(proposed_block_id)
             .is_some());
+       assert!(nodes[2]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_some());
+
     });
 }
 

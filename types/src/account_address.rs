@@ -85,6 +85,7 @@ impl Default for AccountAddress {
     fn default() -> AccountAddress {
         AccountAddress::DEFAULT
     }
+    
 }
 
 impl CryptoHash for AccountAddress {

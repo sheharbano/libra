@@ -8,6 +8,9 @@ use mirai_annotations::*;
 use std::{collections::BTreeMap, fmt};
 use thiserror::Error;
 
+// Bano: Check if we need this
+use crate::crypto_proxies::ValidatorSigner;
+
 /// Errors possible during signature verification.
 #[derive(Debug, Error, PartialEq)]
 pub enum VerifyError {
@@ -120,6 +123,27 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
             total_voting_power,
         })
     }
+
+
+    /// Adds a new node entry to address_to_validator_info
+    pub fn add_to_address_to_validator_info(
+        &mut self,
+        account_address: AccountAddress,
+        target_account_address: AccountAddress,
+        quorum_voting_power: u64
+    )
+    {
+        let validator_info: Option<&ValidatorInfo<PublicKey>> = self.address_to_validator_info.get(&target_account_address);
+
+        match validator_info {
+            None => println!("Failed!"),
+            Some(info) => {
+                let public_key = info.public_key.to_owned();
+                self.address_to_validator_info.insert(account_address, ValidatorInfo::new(public_key, quorum_voting_power));
+            },
+        }
+    }
+
 
     /// Helper method to initialize with a single author and public key with quorum voting power 1.
     pub fn new_single(author: AccountAddress, public_key: PublicKey) -> Self {
