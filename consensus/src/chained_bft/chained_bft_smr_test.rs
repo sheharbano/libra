@@ -249,12 +249,18 @@ fn start_with_proposal_test() {
             .unwrap()
             .get_block(proposed_block_id)
             .is_some());
-       assert!(nodes[2]
+/*       assert!(nodes[2]
             .smr
             .block_store()
             .unwrap()
             .get_block(proposed_block_id)
             .is_some());
+        assert!(nodes[3]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_some());*/
 
     });
 }
