@@ -274,7 +274,7 @@ impl SMRNode {
         // TODO: Read this from an input file eventually
         // FIXME: Specify round proposers here
 
-
+        /*
         twins_round_proposers.insert(
             1,
             vec![signers[0].author(),
@@ -283,12 +283,35 @@ impl SMRNode {
         );
 
         twins_round_proposers.insert(
+            1,
+            vec![signers[0].author()]
+             );
+        */
+
+        twins_round_proposers.insert(
+            1,
+            vec![signers[0].author(),
+                 signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
+            ]
+        );
+        twins_round_proposers.insert(
             2,
             vec![signers[0].author(),
                  signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
             ]
         );
-
+        twins_round_proposers.insert(
+            3,
+            vec![signers[0].author(),
+                 signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
+            ]
+        );
+        twins_round_proposers.insert(
+            4,
+            vec![signers[0].author(),
+                 signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
+            ]
+        );
 
         ValidatorVerifier::set_round_to_validators(
             &mut validator_verifier,
@@ -748,7 +771,7 @@ fn twins_test_simple_safety_attack() {
         // Pull enough votes to get a commit on the first block)
         // The proposer's votes are implicit and do not go in the queue.
         let votes: Vec<VoteMsg> = playground
-            .wait_for_messages(7, NetworkPlayground::votes_only)
+            .wait_for_messages(13, NetworkPlayground::votes_only)
             .await
             .into_iter()
             .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
@@ -777,7 +800,7 @@ fn twins_test_simple_safety_attack() {
             .is_some());
 
         // Check that all nodes of partition 1 have the same QC.
-        let qc_id = nodes[0]
+        let partition_1_qc_id = nodes[0]
             .smr
             .block_store()
             .unwrap()
@@ -792,7 +815,7 @@ fn twins_test_simple_safety_attack() {
                 .highest_quorum_cert()
                 .certified_block()
                 .id(),
-            qc_id
+            partition_1_qc_id
         );
         assert_eq!(
             nodes[2]
@@ -802,24 +825,56 @@ fn twins_test_simple_safety_attack() {
                 .highest_quorum_cert()
                 .certified_block()
                 .id(),
-            qc_id
+            partition_1_qc_id
         );
 
         // Check that all nodes in partition 2 have the same QC
-        // TODO
+        let partition_2_qc_id = nodes[3]
+            .smr
+            .block_store()
+            .unwrap()
+            .highest_quorum_cert()
+            .certified_block()
+            .id();
+        assert_eq!(
+            nodes[4] // twin 0
+                .smr
+                .block_store()
+                .unwrap()
+                .highest_quorum_cert()
+                .certified_block()
+                .id(),
+            partition_2_qc_id
+        );
+        assert_eq!(
+            nodes[5] // twin 1
+                .smr
+                .block_store()
+                .unwrap()
+                .highest_quorum_cert()
+                .certified_block()
+                .id(),
+            partition_2_qc_id
+        );
 
         // Show that the QC of the nodes in parition 1 and partition 2 are different
-        // TODO
+        assert_ne!(partition_1_qc_id, partition_2_qc_id);
 
         // Show that the QC of all nades are on the same round
         // TODO
-        let qc_round = nodes[0]
+        let partition_1_qc_round = nodes[0]
             .smr
             .block_store()
             .unwrap()
             .highest_quorum_cert()
             .certified_block().round();
-
+        let partition_2_qc_round = nodes[3]
+            .smr
+            .block_store()
+            .unwrap()
+            .highest_quorum_cert()
+            .certified_block().round();
+        assert_eq!(partition_1_qc_round, partition_2_qc_round);
     });
 }
 
