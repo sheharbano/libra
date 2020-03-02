@@ -276,16 +276,18 @@ impl SMRNode {
 
 
         twins_round_proposers.insert(
-            2,
+            1,
             vec![signers[0].author(),
                  signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
             ]
         );
 
         twins_round_proposers.insert(
-            1,
-            vec![signers[0].author()]
-             );
+            2,
+            vec![signers[0].author(),
+                 signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
+            ]
+        );
 
 
         ValidatorVerifier::set_round_to_validators(
@@ -432,7 +434,7 @@ fn twins_start_with_proposal_test() {
         SMRNode::start_num_nodes_with_twins(
             2,
             &mut target_nodes,
-            4,
+            2,
             &mut playground,
             RoundProposers,
             false);
@@ -444,12 +446,12 @@ fn twins_start_with_proposal_test() {
     let twin1 = nodes[node_to_twin.get(&1).unwrap().to_owned()].signer.author();
 
 
-    playground.drop_message_for_round(n1,  n0, 1);
-    playground.drop_message_for_round(twin1,  n0, 1);
+    //playground.drop_message_for_round(n1,  n0, 1);
+    //playground.drop_message_for_round(twin1,  n0, 1);
 
     block_on(async move {
         let _proposals = playground
-            .wait_for_messages(1, NetworkPlayground::proposals_only)
+            .wait_for_messages(2, NetworkPlayground::proposals_only)
             .await;
 
         // Need to wait for 4 votes for the 2 replicas plus their twins
