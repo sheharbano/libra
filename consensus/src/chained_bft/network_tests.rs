@@ -99,7 +99,7 @@ impl NetworkPlayground {
     /// they don't block.
     async fn start_node_outbound_handler(
         drop_config: Arc<RwLock<DropConfig>>,
-        drop_config_round: Arc<RwLock<DropConfigRound>>,
+        drop_config_round: Arc<RwLock<DropConfigRound>>, // Bano: This isn't used at all in this function
         src: Author,
         mut network_reqs_rx: libra_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>,
         mut outbound_msgs_tx: mpsc::Sender<(Author, PeerManagerRequest)>,
@@ -208,7 +208,6 @@ impl NetworkPlayground {
             },
 
             Some(VoteMsg(vote)) => {
-                println!("======= VOTE ============");
                 let vote = consensus_types::vote_msg::VoteMsg::try_from(vote).unwrap();
                 vote.vote().vote_data().proposed().round()
             },
@@ -286,13 +285,15 @@ impl NetworkPlayground {
         msg_copy
     // Bano: Fork - need to merge with above
         let round = self.get_message_round(src, msg_copy.1.clone());
-        println!("======== Round is {0} =========", round);
 
         let mut delivered = false;
-        //if(!self.is_message_dropped_round(src.clone(), dst.clone(), round)) {
+
+        // println!("Checking drop policy: Is {0} to {1} dropped in Round {2}? {3}",src, dst, round, self.is_message_dropped_round(src.clone(), dst.clone(), round));
+
+        if(!self.is_message_dropped_round(src.clone(), dst.clone(), round)) {
             node_consensus_tx.send(msg_notif).await.unwrap();
             delivered = true;
-        //}
+        }
         (delivered, msg_copy)
     }
 
@@ -388,7 +389,7 @@ impl NetworkPlayground {
     }
 
 
-    fn is_message_dropped_round(&self, src: Author, dst: Author, round: u64) -> bool {
+    pub fn is_message_dropped_round(&self, src: Author, dst: Author, round: u64) -> bool {
         self.drop_config_round
             .read()
             .unwrap()
@@ -443,7 +444,6 @@ impl DropConfig {
             PeerManagerRequest::SendRpc(dst, _) => self.0.get(src).unwrap().contains(&dst),
             _ => true,
         }
-        //self.0.get(src).unwrap().contains(dst)
     }
 
     pub fn drop_message_for(&mut self, src: &Author, dst: Author) -> bool {
@@ -478,7 +478,6 @@ impl DropConfigRound {
     }
 
     pub fn drop_message_for(&mut self, src: Author, dst: Author, round: u64) -> bool {
-        // self.print();
         if (!self.0.contains_key(&round)) {
             let mut drop_config = DropConfig(HashMap::new());
             self.0.insert(round, drop_config);
@@ -488,16 +487,26 @@ impl DropConfigRound {
             self.0.get_mut(&round).unwrap().add_node(src);
         }
 
-        self.0.get_mut(&round).unwrap().0.get_mut(&src).unwrap().insert(dst)
+        let result = self.0.get_mut(&round).unwrap().0.get_mut(&src).unwrap().insert(dst);
+
+        // self.print();
+
+        result
 
     }
 
-    pub fn print(&mut self) {
+    fn print(&mut self) {
         for val in self.0.iter() {
-            println!("Round is {0} and DropConfig is {1:?} ", val.0, (val.1).0);
+            println!("========================");
+            println!("Round is {0} and DropConfig is as follows:", val.0);
+            let map = val.1;
+            for each in map.0.iter() {
+                println!("{0} -> {1:?} ", each.0, each.1);
+            }
             println!("========================");
         }
     }
+
 
     /*
     pub fn stop_drop_message_for(&mut self, src: &Author, dst: &Author, round: u64) -> bool {
@@ -554,14 +563,6 @@ fn test_network_api() {
         runtime.handle().spawn(task.start());
         nodes.push(node);
     }
-
-
-    // Bano: Testing drop_config_round
-    /*
-    playground.drop_message_for_round(signers[0].author().clone(), signers[2].author().clone(), 0);
-    playground.drop_message_for_round(signers[1].author().clone(),  signers[0].author().clone(), 1);
-    playground.drop_message_for_round(signers[2].author().clone(),  signers[1].author().clone(), 2);
-    */
 
     let vote_msg = VoteMsg::new(
         Vote::new(

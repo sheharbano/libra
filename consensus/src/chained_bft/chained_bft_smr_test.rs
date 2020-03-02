@@ -268,28 +268,23 @@ impl SMRNode {
             );
         }
 
-
         // A map that tells who is the proposer(s) per round
         // Note: If no proposer is defined for a round, we default to the first node
         let mut twins_round_proposers: HashMap<Round, Vec<AccountAddress>> = HashMap::new();
         // TODO: Read this from an input file eventually
-        twins_round_proposers.insert(
-            0,
-            vec![signers[0].author()]
-        );
-
-        twins_round_proposers.insert(
-            2,
-            vec![signers[1].author()]
-             );
 
         // Make node 0 and {the twin of node 0} both proposers
         twins_round_proposers.insert(
-            1,
+            2,
             vec![signers[0].author(),
-                signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
+                 signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
             ]
         );
+
+        twins_round_proposers.insert(
+            1,
+            vec![signers[0].author()]
+             );
 
 
         ValidatorVerifier::set_round_to_validators(
@@ -441,13 +436,18 @@ fn twins_start_with_proposal_test() {
             RoundProposers,
             false);
 
-    // println!("=============\nnode_to_twin: {:?}",node_to_twin);
+
+    let n0 = nodes[0].signer.author();
+    let n1 = nodes[1].signer.author();
+    let twin0 = nodes[node_to_twin.get(&0).unwrap().to_owned()].signer.author();
+    let twin1 = nodes[node_to_twin.get(&1).unwrap().to_owned()].signer.author();
 
     block_on(async move {
         let _proposals = playground
-            .wait_for_messages(3, NetworkPlayground::proposals_only)
+            .wait_for_messages(1, NetworkPlayground::proposals_only)
             .await;
-        // Need to wait for 2 votes for the 2 replicas
+
+        // Need to wait for 4 votes for the 2 replicas plus their twins
         let votes: Vec<VoteMsg> = playground
             .wait_for_messages(4, NetworkPlayground::votes_only)
             .await
@@ -456,7 +456,8 @@ fn twins_start_with_proposal_test() {
             .collect();
         let proposed_block_id = votes[0].vote().vote_data().proposed().id();
 
-        // Verify that the proposed block id is indeed present in the block store.
+        // Verify that the proposed block id is indeed present in the
+        // block store of replicas and their twins.
         assert!(nodes[0]
             .smr
             .block_store()
@@ -481,6 +482,178 @@ fn twins_start_with_proposal_test() {
             .unwrap()
             .get_block(proposed_block_id)
             .is_some());
+
+    });
+}
+
+
+
+#[test]
+/// Upon startup, the first proposal is sent, delivered and voted by all the nodes and twins
+/// except node 01 because it has been added to drop_config for round 1 and does not hear
+/// the proposal from node 0.
+fn twins_drop_config_round_test() {
+    let runtime = consensus_runtime();
+    let mut playground = NetworkPlayground::new(runtime.executor());
+
+
+    // Index #s of nodes (i.e. target nodes) for which we will create twins
+    let mut target_nodes= vec![];
+    target_nodes.push(0);
+    target_nodes.push(1);
+
+    let (nodes, node_to_twin) =
+        SMRNode::start_num_nodes_with_twins(
+            2,
+            &mut target_nodes,
+            2,
+            &mut playground,
+            RoundProposers,
+            false);
+
+
+    let n0 = nodes[0].signer.author();
+    let n1 = nodes[1].signer.author();
+    let twin0 = nodes[node_to_twin.get(&0).unwrap().to_owned()].signer.author();
+    let twin1 = nodes[node_to_twin.get(&1).unwrap().to_owned()].signer.author();
+
+
+    // Filters
+
+    playground.drop_message_for_round(n0,  n1, 1);
+    playground.drop_message_for_round(n0,  n1, 3);
+    playground.drop_message_for_round(n0,  twin0, 3);
+
+    block_on(async move {
+
+        // ===== Round 1 ======
+
+        let _proposals = playground
+            .wait_for_messages(1, NetworkPlayground::proposals_only)
+            .await;
+
+        // Need to wait for 3 votes (from the 1 of the 2 replicas, and twins)
+        let votes: Vec<VoteMsg> = playground
+            .wait_for_messages(3, NetworkPlayground::votes_only)
+            .await
+            .into_iter()
+            .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
+            .collect();
+        let proposed_block_id = votes[0].vote().vote_data().proposed().id();
+
+        // Verify that the proposed block id is indeed present in the block store.
+        assert!(nodes[0]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_some());
+        // node 1 does not have the block id because it did not receive the proposal from node 0
+        assert!(nodes[1]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_none());
+        assert!(nodes[2]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_some());
+        assert!(nodes[3]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_some());
+
+
+        // ========= Round 2 =========
+        let _proposals = playground
+            .wait_for_messages(1, NetworkPlayground::proposals_only)
+            .await;
+
+        // Need to wait for 4 votes (from the 2 replicas, and their twins)
+        let votes: Vec<VoteMsg> = playground
+            .wait_for_messages(4, NetworkPlayground::votes_only)
+            .await
+            .into_iter()
+            .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
+            .collect();
+        let proposed_block_id = votes[0].vote().vote_data().proposed().id();
+
+        // Verify that the proposed block id is indeed present in the block store.
+        assert!(nodes[0]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_some());
+        // node 1 should now have the block id because it's not in drop_config in round 2
+        assert!(nodes[1]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_some());
+        assert!(nodes[2]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_some());
+        assert!(nodes[3]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_some());
+
+        // ===== Round 3 ======
+
+        let _proposals = playground
+            .wait_for_messages(1, NetworkPlayground::proposals_only)
+            .await;
+
+        // Need to wait for 1 vote
+        let votes: Vec<VoteMsg> = playground
+            .wait_for_messages(1, NetworkPlayground::votes_only)
+            .await
+            .into_iter()
+            .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
+            .collect();
+        let proposed_block_id = votes[0].vote().vote_data().proposed().id();
+
+        // Verify that the proposed block id is indeed present in the block store.
+        assert!(nodes[0]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_some());
+        // node 1 does not have the block id because it did not receive the proposal from node 0
+        assert!(nodes[1]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_none());
+        // twin 0 does not have the block id because it did not receive the proposal from node 0
+        assert!(nodes[2]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_none());
+        // twin 1 does not have the block id because it did not receive the proposal from node 0
+        assert!(nodes[3]
+            .smr
+            .block_store()
+            .unwrap()
+            .get_block(proposed_block_id)
+            .is_some());
+
 
     });
 }
