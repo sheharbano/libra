@@ -207,24 +207,11 @@ impl SMRNode {
         playground: &mut NetworkPlayground,
         proposer_type: ConsensusProposerType,
         executor_with_reconfig: bool,
+        twins_round_proposers_idx: HashMap<Round, Vec<usize>>,
+        node_to_twin: HashMap<usize, usize>
     ) -> (Vec<Self>, HashMap<usize, usize>) {
         let (mut signers, mut validator_verifier) =
             random_validator_verifier(num_nodes, Some(quorum_voting_power), true);
-
-        // This helps us map target nodes (for which we will create twins)
-        // to corresponding twin indices in 'nodes'. For example, we get
-        // twin for nodes[1] as follows:  nodes[node_to_twin.get(1)]
-        // Similarly we can access entries for twins in other collections like
-        // 'signers' and 'validator_verifier' by using this map
-        let mut node_to_twin: HashMap<usize, usize> = HashMap::new();
-        for (each, target) in target_nodes.iter().enumerate() {
-            let twin_index = num_nodes + each;
-            node_to_twin.insert(*target, twin_index);
-            debug!(
-                "[Twins] Will create Twin for node {0} at index {1}",
-                *target, twin_index
-            );
-        }
 
         // Vector of twins
         let mut twins: Vec<ValidatorSigner> = vec![];
@@ -298,56 +285,28 @@ impl SMRNode {
         // A map that tells who is the proposer(s) per round
         // Note: If no proposer is defined for a round, we default to the first node
         let mut twins_round_proposers: HashMap<Round, Vec<AccountAddress>> = HashMap::new();
-        // TODO: Read this from an input file eventually
-        // FIXME: Specify round proposers here
 
-        /*
-        twins_round_proposers.insert(
-            1,
-            vec![signers[0].author(),
-                 signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
-            ]
-        );
+        for (round, vec_idx) in twins_round_proposers_idx.iter(){
 
-        twins_round_proposers.insert(
-            1,
-            vec![signers[0].author()]
-             );
-        */
+            let mut idx_to_authors = Vec::new();
+            for idx in vec_idx.iter(){
+                idx_to_authors.push(signers[idx.to_owned()].author());
+            }
+
+            /*
+            println!("======================");
+            println!("Round: {0}, Leaders: [{1:?}]", round, idx_to_authors);
+            println!("======================");
+            */
+
+            // Leader for round 1: node0 and twin_node0
+            twins_round_proposers.insert(
+                round.to_owned(),
+                idx_to_authors
+            );
+        }
 
 
-        // Leader for round 1: node0 and twin_node0
-        twins_round_proposers.insert(
-            1,
-            vec![
-                signers[0].author(),
-                signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
-            ],
-        );
-        // Leader for round 2: node0 and twin_node0
-        twins_round_proposers.insert(
-            2,
-            vec![
-                signers[0].author(),
-                signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
-            ],
-        );
-        // Leader for round 3: node0 and twin_node0
-        twins_round_proposers.insert(
-            3,
-            vec![
-                signers[0].author(),
-                signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
-            ],
-        );
-        // Leader for round 4: node0 and twin_node0
-        twins_round_proposers.insert(
-            4,
-            vec![
-                signers[0].author(),
-                signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
-            ],
-        );
 
         ValidatorVerifier::set_round_to_validators(&mut validator_verifier, twins_round_proposers);
 
@@ -500,19 +459,51 @@ fn twins_start_with_proposal_test() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.executor());
 
+    let num_nodes =2;
+
     // Index #s of nodes (i.e. target nodes) for which we will create twins
     let mut target_nodes = vec![];
     target_nodes.push(0);
     target_nodes.push(1);
 
+    // This helps us map target nodes (for which we will create twins)
+    // to corresponding twin indices in 'nodes'. For example, we get
+    // twin for nodes[1] as follows:  nodes[node_to_twin.get(1)]
+    // Similarly we can access entries for twins in other collections like
+    // 'signers' and 'validator_verifier' by using this map
+    let mut node_to_twin: HashMap<usize, usize> = HashMap::new();
+    for (each, target) in target_nodes.iter().enumerate() {
+        let twin_index = num_nodes + each;
+        node_to_twin.insert(*target, twin_index);
+        debug!(
+            "[Twins] Will create Twin for node {0} at index {1}",
+            *target, twin_index
+        );
+    }
+
+
+    // Specify round leaders here
+    // Will default to the first node, if no leader specified for given round
+    let mut twins_round_proposers_idx: HashMap<Round, Vec<usize>> = HashMap::new();
+
+    twins_round_proposers_idx.insert(1, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
+
+    twins_round_proposers_idx.insert(2, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
+
+    twins_round_proposers_idx.insert(3, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
+
+    twins_round_proposers_idx.insert(4, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
+
     // Start a network with 2 nodes and 2 twins for those nodes
     let (nodes, node_to_twin) = SMRNode::start_num_nodes_with_twins(
-        2,
+        num_nodes,
         &mut target_nodes,
         3,
         &mut playground,
         RoundProposers,
         false,
+        twins_round_proposers_idx,
+        node_to_twin
     );
 
     let n0 = nodes[0].signer.author();
@@ -557,6 +548,7 @@ fn twins_start_with_proposal_test() {
             .unwrap()
             .highest_quorum_cert();
 
+        println!("");
 
         // Proposal from node0 and twin_node0 are going to race
         // but only one of them will form QC because quorum voting
@@ -575,18 +567,48 @@ fn twins_drop_config_round_test() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.executor());
 
+    let num_nodes =2;
+
     // Index #s of nodes (i.e. target nodes) for which we will create twins
     let mut target_nodes = vec![];
     target_nodes.push(0);
     target_nodes.push(1);
 
+    // This helps us map target nodes (for which we will create twins)
+    // to corresponding twin indices in 'nodes'. For example, we get
+    // twin for nodes[1] as follows:  nodes[node_to_twin.get(1)]
+    // Similarly we can access entries for twins in other collections like
+    // 'signers' and 'validator_verifier' by using this map
+    let mut node_to_twin: HashMap<usize, usize> = HashMap::new();
+    for (each, target) in target_nodes.iter().enumerate() {
+        let twin_index = num_nodes + each;
+        node_to_twin.insert(*target, twin_index);
+        debug!(
+            "[Twins] Will create Twin for node {0} at index {1}",
+            *target, twin_index
+        );
+    }
+
+
+    // Specify round leaders here
+    // Will default to the first node, if no leader specified for given round
+    let mut twins_round_proposers_idx: HashMap<Round, Vec<usize>> = HashMap::new();
+
+    twins_round_proposers_idx.insert(1, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
+
+    twins_round_proposers_idx.insert(2, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
+
+    twins_round_proposers_idx.insert(3, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
+
     let (nodes, node_to_twin) = SMRNode::start_num_nodes_with_twins(
-        2,
+        num_nodes,
         &mut target_nodes,
         2,
         &mut playground,
         RoundProposers,
         false,
+        twins_round_proposers_idx,
+        node_to_twin
     );
 
     let n0 = nodes[0].signer.author();
@@ -750,18 +772,47 @@ fn twins_test_simple_safety_attack() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.executor());
 
+    let num_nodes =4;
+
     // Index #s of nodes (i.e. target nodes) for which we will create twins
     let mut target_nodes = vec![];
     target_nodes.push(0);
     target_nodes.push(1);
 
+    // This helps us map target nodes (for which we will create twins)
+    // to corresponding twin indices in 'nodes'. For example, we get
+    // twin for nodes[1] as follows:  nodes[node_to_twin.get(1)]
+    // Similarly we can access entries for twins in other collections like
+    // 'signers' and 'validator_verifier' by using this map
+    let mut node_to_twin: HashMap<usize, usize> = HashMap::new();
+    for (each, target) in target_nodes.iter().enumerate() {
+        let twin_index = num_nodes + each;
+        node_to_twin.insert(*target, twin_index);
+        debug!(
+            "[Twins] Will create Twin for node {0} at index {1}",
+            *target, twin_index
+        );
+    }
+
+
+    // Specify round leaders here
+    // Will default to the first node, if no leader specified for given round
+    let mut twins_round_proposers_idx: HashMap<Round, Vec<usize>> = HashMap::new();
+
+    twins_round_proposers_idx.insert(1, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
+
+    twins_round_proposers_idx.insert(2, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
+
+    twins_round_proposers_idx.insert(3, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
     let (nodes, node_to_twin) = SMRNode::start_num_nodes_with_twins(
-        /* num_nodes */ 4,
+        /* num_nodes */ num_nodes,
         &mut target_nodes,
         /* quorum_voting_power */ 3,
         &mut playground,
         RoundProposers, //FixedProposer,
         /* executor_with_reconfig */ false,
+        twins_round_proposers_idx,
+        node_to_twin
     );
 
     let n0 = nodes[0].signer.author();
@@ -1150,8 +1201,33 @@ fn run_experiment(
     for i in 0..f {
         target_nodes.push(i);
     }
-    // TODO: 'leaders' should be provided to 'start_num_nodes_with_twins'
-    // (but we first need to address the FIXME in 'start_num_nodes_with_twins').
+
+    // This helps us map target nodes (for which we will create twins)
+    // to corresponding twin indices in 'nodes'. For example, we get
+    // twin for nodes[1] as follows:  nodes[node_to_twin.get(1)]
+    // Similarly we can access entries for twins in other collections like
+    // 'signers' and 'validator_verifier' by using this map
+    let mut node_to_twin: HashMap<usize, usize> = HashMap::new();
+    for (each, target) in target_nodes.iter().enumerate() {
+        let twin_index = num_nodes + each;
+        node_to_twin.insert(*target, twin_index);
+        debug!(
+            "[Twins] Will create Twin for node {0} at index {1}",
+            *target, twin_index
+        );
+    }
+
+
+    // Specify round leaders here
+    // Will default to the first node, if no leader specified for given round
+    let mut twins_round_proposers_idx: HashMap<Round, Vec<usize>> = HashMap::new();
+
+    twins_round_proposers_idx.insert(1, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
+
+    twins_round_proposers_idx.insert(2, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
+
+    twins_round_proposers_idx.insert(3, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
+
     let (nodes, node_to_twin) = SMRNode::start_num_nodes_with_twins(
         num_nodes,
         &mut target_nodes,
@@ -1159,6 +1235,8 @@ fn run_experiment(
         &mut playground,
         RoundProposers,
         /* executor_with_reconfig */ false,
+        twins_round_proposers_idx,
+        node_to_twin
     );
 
     // Create partitions.
