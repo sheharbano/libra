@@ -41,6 +41,9 @@ use tempfile::NamedTempFile;
 use tokio::runtime;
 use libra_types::account_address::AccountAddress;
 
+use consensus_types::common::Round;
+use std::collections::HashMap;
+
 /// Auxiliary struct that is preparing SMR for the test
 struct SMRNode {
     config: NodeConfig,
@@ -164,7 +167,9 @@ impl SMRNode {
 
         nodes
     }
-    
+
+    // Returns a vector of nodes created, and a mapping between node index
+    // and corresponding twin index (twins are included in the nodes vector)
     fn start_num_nodes_with_twins(
         num_nodes: usize,
         // Index #s of nodes (i.e. target nodes) for which we will create twins
@@ -173,9 +178,22 @@ impl SMRNode {
         playground: &mut NetworkPlayground,
         proposer_type: ConsensusProposerType,
         executor_with_reconfig: bool,
-    ) -> Vec<Self> {
+    ) -> (Vec<Self>, HashMap<usize, usize>) {
+
         let (mut signers, mut validator_verifier) =
             random_validator_verifier(num_nodes, Some(quorum_voting_power), true);
+
+        // This helps us map target nodes (for which we will create twins)
+        // to corresponding twin indices in 'nodes'. For example, we get
+        // twin for nodes[1] as follows:  nodes[node_to_twin.get(1)]
+        // Similarly we can access entries for twins in other collections like
+        // 'signers' and 'validator_verifier' by using this map
+        let mut node_to_twin: HashMap<usize, usize> = HashMap::new();
+        for (each, target) in target_nodes.iter().enumerate() {
+            let twin_index = num_nodes + each;
+            node_to_twin.insert(*target, twin_index);
+        }
+
 
         // Vector of twins
         let mut twins: Vec<ValidatorSigner> = vec![];
@@ -185,9 +203,10 @@ impl SMRNode {
         // "f0" onwards in logs
         let mut twin_account_index = 240;
 
-        for ref_target_node in target_nodes {
+        // Add twins to 'signers' and 'validator verifier'
+        for ref_target_node in target_nodes.clone() {
 
-            let target_node = *ref_target_node;
+            let target_node = ref_target_node;
 
             // Clone the target node and add to vector of twins
             twins.push(signers[target_node].clone());
@@ -247,6 +266,22 @@ impl SMRNode {
             );
         }
 
+
+        // A map that tells who is the proposer(s) per round
+        // Note: If no proposer is defined for a round, we default to the first node
+        let mut twins_round_proposers = HashMap::new();
+        // TODO: Read this from an input file eventually
+        twins_round_proposers.insert(0,[signers[0].author()]);
+        twins_round_proposers.insert(1,[signers[1].author()]);
+        // Make {the twin of node 0} proposer
+        let mut twin_index = node_to_twin[&0];
+        twins_round_proposers.insert(2,[signers[twin_index].author()]);
+        //twins_round_proposers.insert(3,[&1]);
+        //twins_round_proposers.insert(4,[&0]);
+
+
+        //println!("===========\nsigners[0]: {:?}",signers[0]);
+
         let validator_set = if executor_with_reconfig {
             Some((&validator_verifier).into())
         } else {
@@ -277,7 +312,11 @@ impl SMRNode {
                 executor_validator_set.clone(),
             ));
         }
-        smr_nodes
+
+        (
+        nodes,
+        node_to_twin,
+        )
     }
 }
 
@@ -365,7 +404,6 @@ fn start_with_proposal_test() {
 }
 
 
-
 #[test]
 /// Upon startup, the first proposal is sent, delivered and voted by all the nodes and twins.
 fn twins_start_with_proposal_test() {
@@ -374,11 +412,13 @@ fn twins_start_with_proposal_test() {
 
 
     // Index #s of nodes (i.e. target nodes) for which we will create twins
-    let mut target_nodes: Vec<usize>  = vec![];
+    let mut target_nodes= vec![];
     target_nodes.push(0);
     target_nodes.push(1);
 
-    let nodes = SMRNode::start_num_nodes_with_twins(2, &mut target_nodes, 2, &mut playground, FixedProposer, false);
+    let (nodes, node_to_twin) = SMRNode::start_num_nodes_with_twins(2, &mut target_nodes, 2, &mut playground, FixedProposer, false);
+
+    // println!("=============\nnode_to_twin: {:?}",node_to_twin);
 
     block_on(async move {
         let _proposals = playground
