@@ -34,6 +34,17 @@ use std::{
 };
 use tokio::runtime::Handle;
 
+use network::{
+    proto::{
+        Proposal, RequestBlock, RequestEpoch,
+        SyncInfo as SyncInfoProto, VoteMsg as VoteMsgProto,
+    }
+};
+
+use consensus_types::{
+    proposal_msg::{ProposalUncheckedSignatures}
+};
+
 /// `NetworkPlayground` mocks the network implementation and provides convenience
 /// methods for testing. Test clients can use `wait_for_messages` or
 /// `deliver_messages` to inspect the direct-send messages sent between peers.
@@ -58,6 +69,8 @@ pub struct NetworkPlayground {
     outbound_msgs_rx: mpsc::Receiver<(Author, PeerManagerRequest)>,
     /// Allow test code to drop direct-send messages between peers.
     drop_config: Arc<RwLock<DropConfig>>,
+    /// Allow test code to drop direct-send messages between peers per round.
+    // drop_config_round: Arc<RwLock<DropConfigRound>>,
     /// An executor for spawning node outbound network event handlers
     executor: Handle,
 }
@@ -71,6 +84,7 @@ impl NetworkPlayground {
             outbound_msgs_tx,
             outbound_msgs_rx,
             drop_config: Arc::new(RwLock::new(DropConfig(HashMap::new()))),
+            //drop_config_round: Arc::new(RwLock::new(DropConfigRound(HashMap::new()))),
             executor,
         }
     }
@@ -85,6 +99,7 @@ impl NetworkPlayground {
     /// they don't block.
     async fn start_node_outbound_handler(
         drop_config: Arc<RwLock<DropConfig>>,
+        //drop_config_round: Arc<RwLock<DropConfigRound>>,
         src: Author,
         mut network_reqs_rx: libra_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>,
         mut outbound_msgs_tx: mpsc::Sender<(Author, PeerManagerRequest)>,
@@ -167,6 +182,7 @@ impl NetworkPlayground {
 
         let fut1 = NetworkPlayground::start_node_outbound_handler(
             Arc::clone(&self.drop_config),
+            //Arc::clone(&self.drop_config_round),
             author,
             network_reqs_rx,
             self.outbound_msgs_tx.clone(),
@@ -175,6 +191,40 @@ impl NetworkPlayground {
         let fut2 = conn_mgr_reqs_rx.map(Ok).forward(::futures::sink::drain());
         self.executor.spawn(futures::future::join(fut1, fut2));
     }
+
+    fn get_message_round(&self, src: Author, msg: ConsensusMsg)-> u64 {
+
+        use ConsensusMsg_oneof::*;
+
+        match msg.message {
+            Some(Proposal(proposal)) => {
+                println!("======= PROPOSAL ============");
+                let proposal: ProposalMsg<Vec<u64>> =
+                    ProposalUncheckedSignatures::<Vec<u64>>::try_from(proposal)
+                        .unwrap()
+                        .into();
+                proposal.round()
+            },
+            Some(VoteMsg(vote)) => {
+                println!("======= VOTE ============");
+                let vote = consensus_types::vote_msg::VoteMsg::try_from(vote).unwrap();
+                vote.vote().vote_data().proposed().round()
+            },
+
+            // The messages below are not specific to consensus and do not
+            // carry a round number. Per round blocking therefore only works
+            // for proposals and votes
+            /*
+            Some(SyncInfo(sync_info)) => println!("======= SYNCINFO ============"),
+            Some(EpochChange(proof)) => println!("======= EPOCH CHANGE ============"),
+            Some(RequestEpoch(request)) => println!("======= REQUEST EPOCH ============"),
+            */
+            //_ => None,
+            //_ => (msg, 999)
+            _ => 999
+        }
+    }
+
 
     /// Deliver a `PeerManagerRequest` from peer `src` to the destination peer.
     /// Returns a copy of the delivered message and the sending peer id.
@@ -224,6 +274,7 @@ impl NetworkPlayground {
             ),
         };
 
+    // Bano: Upstream
         node_consensus_tx
             .push(
                 (src, ProtocolId::from_static(CONSENSUS_DIRECT_SEND_PROTOCOL)),
@@ -231,7 +282,19 @@ impl NetworkPlayground {
             )
             .unwrap();
         msg_copy
+    // Bano: Fork - need to merge with above
+        let round = self.get_message_round(src, msg_copy.1.clone());
+        // println!("======== Round is {0} =========", round);
+
+        let mut delivered = false;
+        //if(!self.is_message_dropped_round(src.clone(), dst.clone(), round)) {
+        if(true) {
+            node_consensus_tx.send(msg_notif).await.unwrap();
+            delivered = true;
+        }
+        (delivered, msg_copy)
     }
+
 
     /// Wait for exactly `num_messages` to be enqueued and delivered. Return a
     /// copy of all messages for verification.
@@ -253,7 +316,10 @@ impl NetworkPlayground {
 
             // Deliver and copy message it if it's not dropped
             if !self.is_message_dropped(&src, &net_req) {
-                let msg_copy = self.deliver_message(src, net_req).await;
+            //if !self.is_message_dropped(&src, &dst) {
+                let (delivered, msg_copy) = self.deliver_message(src, net_req).await;
+                //node_consensus_tx.send(msg_notif).await.unwrap();
+
                 if msg_inspector(&msg_copy) {
                     msg_copies.push(msg_copy);
                 }
@@ -320,9 +386,26 @@ impl NetworkPlayground {
             .is_message_dropped(src, net_req)
     }
 
+
+    /*
+    fn is_message_dropped_round(&self, src: Author, dst: Author, msg: ConsensusMsg) -> bool {
+        self.drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(src, dst, msg)
+    }
+    */
+
+
     pub fn drop_message_for(&mut self, src: &Author, dst: Author) -> bool {
         self.drop_config.write().unwrap().drop_message_for(src, dst)
     }
+
+    /*
+    pub fn drop_message_for_round(&mut self, src: Author, dst: Author, round: u64) -> bool {
+        self.drop_config_round.write().unwrap().drop_message_for(src, dst, round)
+    }
+    */
 
     pub fn stop_drop_message_for(&mut self, src: &Author, dst: &Author) -> bool {
         self.drop_config
@@ -363,6 +446,7 @@ impl DropConfig {
             PeerManagerRequest::SendRpc(dst, _) => self.0.get(src).unwrap().contains(&dst),
             _ => true,
         }
+        //self.0.get(src).unwrap().contains(dst)
     }
 
     pub fn drop_message_for(&mut self, src: &Author, dst: Author) -> bool {
@@ -378,6 +462,7 @@ impl DropConfig {
     }
 }
 
+
 use crate::chained_bft::{network::NetworkTask, test_utils::TestPayload};
 use consensus_types::block_retrieval::{
     BlockRetrievalRequest, BlockRetrievalResponse, BlockRetrievalStatus,
@@ -386,6 +471,10 @@ use libra_crypto::HashValue;
 #[cfg(test)]
 use libra_types::crypto_proxies::random_validator_verifier;
 
+// Bano: Check if these imports are needed
+use std::convert::{TryFrom, TryInto};
+use libra_types::validator_verifier::ValidatorVerifier;
+
 #[test]
 fn test_network_api() {
     let runtime = consensus_runtime();
@@ -393,6 +482,8 @@ fn test_network_api() {
     let mut receivers: Vec<NetworkReceivers<TestPayload>> = Vec::new();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let mut nodes = Vec::new();
+
+
     let (signers, validator_verifier) = random_validator_verifier(num_nodes, None, false);
     let peers: Vec<_> = signers.iter().map(|signer| signer.author()).collect();
     let validators = Arc::new(validator_verifier);
@@ -414,6 +505,15 @@ fn test_network_api() {
         runtime.handle().spawn(task.start());
         nodes.push(node);
     }
+
+
+    // Bano: Testing drop_config_round
+    /*
+    playground.drop_message_for_round(signers[0].author().clone(), signers[2].author().clone(), 0);
+    playground.drop_message_for_round(signers[1].author().clone(),  signers[0].author().clone(), 1);
+    playground.drop_message_for_round(signers[2].author().clone(),  signers[1].author().clone(), 2);
+    */
+
     let vote_msg = VoteMsg::new(
         Vote::new(
             VoteData::new(BlockInfo::random(1), BlockInfo::random(0)),
@@ -455,6 +555,7 @@ fn test_network_api() {
         }
     });
 }
+
 
 #[test]
 fn test_rpc() {
