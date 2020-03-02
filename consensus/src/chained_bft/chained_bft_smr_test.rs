@@ -1068,7 +1068,7 @@ fn twins_safety_violation_scenario_executor_test() {
         round_partitions_idx,
         twins_round_proposers_idx,
         quorum_voting_power,
-        true
+        true,
     );
 }
 
@@ -1187,7 +1187,7 @@ fn execute_scenario(
     round_partitions_idx: HashMap<u64, Vec<Vec<usize>>>,
     twins_round_proposers_idx: HashMap<Round, Vec<usize>>,
     quorum_voting_power: u64,
-    enable_safety_assertion: bool
+    enable_safety_assertion: bool,
 ) {
     //assert_eq!(partitions.len(), leaders.len());
     //let num_of_rounds = partitions.len().clone();
@@ -1248,7 +1248,7 @@ fn execute_scenario(
         // Pull enough votes to get a commit on the first block)
         // The proposer's votes are implicit and do not go in the queue.
         let votes: Vec<VoteMsg> = playground
-            .wait_for_messages(num_nodes*num_of_rounds, NetworkPlayground::votes_only)
+            .wait_for_messages(num_nodes * num_of_rounds, NetworkPlayground::votes_only)
             .await
             .into_iter()
             .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
@@ -1282,8 +1282,7 @@ fn execute_scenario(
         // Now check if the branches match at all heights
         if enable_safety_assertion {
             assert!(is_safe(all_branches));
-        }
-        else {
+        } else {
             is_safe(all_branches);
         }
     });
@@ -1430,14 +1429,20 @@ fn test_filter_partitions() {
     );
 }
 
-fn filter_partitions_pick_n(list_of_partitions: &mut Vec<Vec<Vec<usize>>>, n: usize) {
+fn filter_partitions_pick_n(
+    list_of_partitions: &mut Vec<Vec<Vec<usize>>>,
+    n: usize,
+    with_replacement: bool,
+) {
     if n < list_of_partitions.len() {
         let mut rng = rand::thread_rng();
         let mut dice = rng.gen_range(0, list_of_partitions.len());
         let mut seen = Vec::new();
         for i in 0..n {
             list_of_partitions[i] = list_of_partitions[dice].clone();
-            seen.push(dice);
+            if !with_replacement {
+                seen.push(dice);
+            }
             while seen.contains(&dice) {
                 dice = rng.gen_range(0, list_of_partitions.len());
             }
@@ -1449,14 +1454,17 @@ fn filter_partitions_pick_n(list_of_partitions: &mut Vec<Vec<Vec<usize>>>, n: us
 #[test]
 /// run:
 /// cargo xtest -p consensus twins_test_safety_attack_generator -- --nocapture
+/// To compute the time it take to run the measurements, run:
+/// time cargo xtest -p consensus twins_test_safety_attack_generator
 fn twins_test_safety_attack_generator() {
     const NUM_OF_ROUNDS: usize = 4; // Play with this parameter
     const NUM_OF_NODES: usize = 4; // Play with this parameter
     const NUM_OF_PARTITIONS: usize = 2; // Play with this parameter
-    const PARTITIONS_PICK_N : usize = 6; // How many partitions to pick from all possible partition scenarios
-                                          // (assuming there are more "all possible partition scenarios" than
-    //                                    // the number of rounds. This is a filtering mechanism essentially.)
-    const IS_DRY_RUN: bool = false; // Don't execute scenarios, just print stats
+    const PARTITIONS_PICK_N: usize = 15; // How many partitions to pick from all possible partition scenarios
+                                         // (assuming there are more "all possible partition scenarios" than
+                                         // the number of rounds. This is a filtering mechanism essentially.)
+    const WITH_REPLACEMENT: bool = false; // whether to pick n partitions with replacement
+    const IS_DRY_RUN: bool = true; // Don't execute scenarios, just print stats
 
     //let f = (NUM_OF_NODES - 1) / 3;
 
@@ -1547,7 +1555,11 @@ fn twins_test_safety_attack_generator() {
     //partition_scenarios = filter_partitions(partition_scenarios, NUM_OF_NODES);
 
     // Choose only two partitions
-    filter_partitions_pick_n(&mut partition_scenarios, PARTITIONS_PICK_N);
+    filter_partitions_pick_n(
+        &mut partition_scenarios,
+        PARTITIONS_PICK_N,
+        WITH_REPLACEMENT,
+    );
 
     println!(
         "After filtering, we have {:?} partition scenarios (we filtered out {:?} scenarios).",
@@ -1637,7 +1649,7 @@ fn twins_test_safety_attack_generator() {
     // =============================================
 
     let mut round = 1;
-    let mut num_test_cases =1;
+    let mut num_test_cases = 0;
 
     for each_test in test_cases {
         let mut round_partitions_idx = HashMap::new();
@@ -1666,25 +1678,19 @@ fn twins_test_safety_attack_generator() {
                 round_partitions_idx,      // this changes for each test
                 twins_round_proposers_idx, // this changes for each test
                 quorum_voting_power,
-                false
+                false,
             );
         }
 
         num_test_cases += 1;
-        //thread::sleep(time::Duration::from_secs(1));
+        //thread::sleep(time::Duration::from_millis(1000));
     }
-
 
     println!(
         "\nFinished running total {:?} test cases for {:?} nodes, {:?} node-twin pairs, \
-        {:?} rounds and {:?} partitions\n",
-        num_test_cases,
-        NUM_OF_NODES,
-        f,
-        NUM_OF_ROUNDS,
-        NUM_OF_PARTITIONS
+         {:?} rounds and {:?} partitions\n",
+        num_test_cases, NUM_OF_NODES, f, NUM_OF_ROUNDS, NUM_OF_PARTITIONS
     );
-
 }
 
 // ===============================
