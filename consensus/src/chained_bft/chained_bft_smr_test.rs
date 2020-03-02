@@ -1461,6 +1461,9 @@ fn filter_partitions_pick_n(
     n: usize,
     parameter: usize
 ) {
+    if n > list_of_partitions.len() {
+        return;
+    }
     match parameter {
         0 => list_of_partitions.truncate(n),
         1 | 2 => {
@@ -1723,10 +1726,6 @@ fn twins_test_safety_attack_generator() {
                 quorum_voting_power,
                 false,
             );
-        }
-
-        if num_test_cases == 5 {
-            break;
         }
 
         num_test_cases += 1;
