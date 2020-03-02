@@ -1653,7 +1653,6 @@ fn twins_test_safety_attack_generator() {
             &node_to_twin,
             round_partitions_idx,      // this changes for each test
             twins_round_proposers_idx, // this changes for each test
-            quorum_voting_power,
             false
         );
 
