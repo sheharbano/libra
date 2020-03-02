@@ -28,6 +28,28 @@ use consensus_types::{
     epoch_retrieval::EpochRetrievalRequest,
 };
 use libra_config::config::{ConsensusConfig, ConsensusProposerType};
+
+// Bano: Need to check the imports below
+use crate::chained_bft::block_storage::{BlockReader, BlockStore};
+use crate::chained_bft::chained_bft_smr::ChainedBftSMRConfig;
+use crate::chained_bft::event_processor::EventProcessor;
+use crate::chained_bft::liveness::multi_proposer_election::MultiProposer;
+use crate::chained_bft::liveness::pacemaker::{ExponentialTimeInterval, Pacemaker};
+use crate::chained_bft::liveness::proposal_generator::ProposalGenerator;
+use crate::chained_bft::liveness::proposer_election::ProposerElection;
+use crate::chained_bft::liveness::rotating_proposer_election::{choose_leader, RotatingProposer};
+use crate::chained_bft::liveness::round_proposers_election::{RoundProposers};
+use crate::chained_bft::network::NetworkSender;
+use crate::chained_bft::persistent_storage::{PersistentStorage, RecoveryData};
+use crate::counters;
+use crate::state_replication::{StateComputer, TxnManager};
+use crate::util::time_service::{ClockTimeService, TimeService};
+use consensus_types::common::{Payload, Round};
+use consensus_types::epoch_retrieval::EpochRetrievalRequest;
+use futures::executor::block_on;
+use libra_config::config::{ConsensusProposerType, SafetyRulesBackend};
+// end
+
 use libra_logger::prelude::*;
 use libra_types::{
     account_address::AccountAddress,
@@ -145,6 +167,9 @@ impl<T: Payload> EpochManager<T> {
             .verifier
             .get_ordered_account_addresses_iter()
             .collect::<Vec<_>>();
+
+        let round_proposers = validators.get_round_proposers();
+
         match self.config.proposer_type {
             ConsensusProposerType::MultipleOrderedProposers => {
                 Box::new(MultiProposer::new(epoch_info.epoch, proposers, 2))
@@ -152,6 +177,11 @@ impl<T: Payload> EpochManager<T> {
             ConsensusProposerType::RotatingProposer => Box::new(RotatingProposer::new(
                 proposers,
                 self.config.contiguous_rounds,
+            )),
+            ConsensusProposerType::RoundProposers => Box::new(RoundProposers::new(
+                round_proposers,
+                // default proposer is set to the first validator
+                proposers[0]
             )),
             // We don't really have a fixed proposer!
             ConsensusProposerType::FixedProposer => {

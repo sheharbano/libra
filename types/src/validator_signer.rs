@@ -48,6 +48,13 @@ impl ValidatorSigner {
     pub fn private_key(&self) -> &Ed25519PrivateKey {
         &self.private_key
     }
+<<<<<<< HEAD
+=======
+
+    pub fn set_account_address(&mut self, account_address: AccountAddress) {
+        self.author = account_address;
+    }
+>>>>>>> 741d2ab7... Removed print statements (used for debugging)
 }
 
 impl ValidatorSigner {

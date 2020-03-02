@@ -11,6 +11,12 @@ use mirai_annotations::*;
 use std::{collections::BTreeMap, fmt};
 use thiserror::Error;
 
+// Bano: Check if we need this
+use crate::crypto_proxies::ValidatorSigner;
+
+use std::collections::HashMap;
+
+
 /// Errors possible during signature verification.
 #[derive(Debug, Error, PartialEq)]
 pub enum VerifyError {
@@ -76,6 +82,9 @@ pub struct ValidatorVerifier {
     quorum_voting_power: u64,
     /// Total voting power of all validators (cached from address_to_validator_info)
     total_voting_power: u64,
+    // Used in twins testing to specify leader(s) per round.
+    // Note: Round is u64
+    round_to_validators: Option<HashMap<u64, Vec<AccountAddress> > >,
 }
 
 impl ValidatorVerifier {
@@ -93,10 +102,12 @@ impl ValidatorVerifier {
         } else {
             total_voting_power * 2 / 3 + 1
         };
+
         ValidatorVerifier {
             address_to_validator_info,
             quorum_voting_power,
             total_voting_power,
+            round_to_validators: None,
         }
     }
 
@@ -121,8 +132,39 @@ impl ValidatorVerifier {
             address_to_validator_info,
             quorum_voting_power,
             total_voting_power,
+            round_to_validators: None,
         })
     }
+
+
+    /// Adds a new node entry to address_to_validator_info
+    pub fn add_to_address_to_validator_info(
+        &mut self,
+        account_address: AccountAddress,
+        &target_account_address: &AccountAddress,
+        quorum_voting_power: u64
+    )
+    {
+        let validator_info: Option<&ValidatorInfo<PublicKey>> = self.address_to_validator_info.get(&target_account_address);
+
+        match validator_info {
+            None => println!("[Twins] Error: Could not add Twin to ValidatorVerifier"),
+            Some(info) => {
+                let public_key = info.public_key.to_owned();
+                self.address_to_validator_info.insert(account_address, ValidatorInfo::new(public_key, quorum_voting_power));
+            },
+        }
+    }
+
+    /// Sets the `round_to_validators' field of the struct ValidatorVerifier
+    pub fn set_round_to_validators(
+        &mut self,
+        round_to_validators_map: HashMap<u64, Vec<AccountAddress>>
+    )
+    {
+        self.round_to_validators = Some(round_to_validators_map);
+    }
+
 
     /// Helper method to initialize with a single author and public key with quorum voting power 1.
     pub fn new_single(author: AccountAddress, public_key: Ed25519PublicKey) -> Self {
