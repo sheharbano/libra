@@ -1448,11 +1448,18 @@ fn filter_partitions_pick_n(list_of_partitions: &mut Vec<Vec<Vec<usize>>>, n: us
 /// run:
 /// cargo xtest -p consensus twins_test_safety_attack_generator -- --nocapture
 fn twins_test_safety_attack_generator() {
-    const NUM_OF_ROUNDS: usize = 15; // Play with this parameter
-    const NUM_OF_NODES: usize = 7; // Play with this parameter
+    const NUM_OF_ROUNDS: usize = 5; // Play with this parameter
+    const NUM_OF_NODES: usize = 4; // Play with this parameter
     const NUM_OF_PARTITIONS: usize = 2; // Play with this parameter
+    const PARTITIONS_PICK_N : usize = 6; // How many partitions to pick from all possible partition scenarios
+                                          // (assuming there are more "all possible partition scenarios" than
+    //                                    // the number of rounds. This is a filtering mechanism essentially.)
+    const IS_DRY_RUN: bool = false; // Don't execute scenarios, just print stats
 
-    let f = (NUM_OF_NODES - 1) / 3;
+    //let f = (NUM_OF_NODES - 1) / 3;
+
+    let f = ((NUM_OF_NODES - 1) / 3) +1;
+
     let quorum_voting_power: u64 = (NUM_OF_NODES - f) as u64;
 
     // =============================================
@@ -1538,7 +1545,8 @@ fn twins_test_safety_attack_generator() {
     //partition_scenarios = filter_partitions(partition_scenarios, NUM_OF_NODES);
 
     // Choose only two partitions
-    filter_partitions_pick_n(&mut partition_scenarios, 10);
+    filter_partitions_pick_n(&mut partition_scenarios, PARTITIONS_PICK_N);
+
     println!(
         "After filtering, we have {:?} partition scenarios (we filtered out {:?} scenarios).",
         partition_scenarios.len(),
@@ -1647,14 +1655,18 @@ fn twins_test_safety_attack_generator() {
             round += 1;
         }
 
-        execute_scenario(
-            NUM_OF_NODES,
-            &target_nodes,
-            &node_to_twin,
-            round_partitions_idx,      // this changes for each test
-            twins_round_proposers_idx, // this changes for each test
-            false
-        );
+
+        if (!IS_DRY_RUN) {
+            execute_scenario(
+                NUM_OF_NODES,
+                &target_nodes,
+                &node_to_twin,
+                round_partitions_idx,      // this changes for each test
+                twins_round_proposers_idx, // this changes for each test
+                quorum_voting_power,
+                false
+            );
+        }
 
         num_test_cases += 1;
         //thread::sleep(time::Duration::from_secs(1));
