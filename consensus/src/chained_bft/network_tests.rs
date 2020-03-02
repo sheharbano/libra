@@ -294,9 +294,13 @@ impl NetworkPlayground {
         if (!self.is_message_dropped_round(src.clone(), dst.clone(), round)) {
             node_consensus_tx.send(msg_notif).await.unwrap();
             delivered = true;
-        } else {
+        }
+
+        /*
+        else {
             println!("Dropping message {0} -> {1} in Round {2}?", src, dst, round);
         }
+        */
 
         (delivered, msg_copy)
     }
@@ -719,13 +723,13 @@ fn test_stop_split_network_round() {
         );
     }
 
-    print_round_partitions(&round_partitions);
+    //print_round_partitions(&round_partitions);
 
     playground.split_network_round(&round_partitions);
 
-    println!("Dropping the following messages:");
+    //println!("Dropping the following messages:");
 
-    playground.print_drop_config_round();
+    //playground.print_drop_config_round();
 
     for round in 0..3 {
 
