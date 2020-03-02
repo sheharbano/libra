@@ -61,20 +61,18 @@ use tempfile::NamedTempFile;
 use tokio::runtime;
 
 use libra_config::config::ConsensusProposerType::RoundProposers;
+use libra_crypto::hash::HashValue;
 use libra_logger::prelude::*;
 use std::collections::HashMap;
-use libra_crypto::hash::HashValue;
 
-use consensus_types::{
-    common::Round, executed_block::ExecutedBlock
-};
+use consensus_types::{common::Round, executed_block::ExecutedBlock};
 
-use permutator::{Combination, XPermutationIterator};
-use itertools::Itertools;
 use itertools::enumerate;
+use itertools::Itertools;
+use permutator::{Combination, XPermutationIterator};
 
-use rand::Rng;
 use permutator::copy::Permutation;
+use rand::Rng;
 use std::{thread, time};
 
 /// Auxiliary struct that is preparing SMR for the test
@@ -217,10 +215,8 @@ impl SMRNode {
         // Leaders per round
         twins_round_proposers_idx: HashMap<Round, Vec<usize>>,
         // The indices at which twins will be created
-        node_to_twin: &HashMap<usize, usize>
+        node_to_twin: &HashMap<usize, usize>,
     ) -> Vec<Self> {
-
-
         // ======================================
         // Generate 'ValidatorSigner' and 'ValidatorVerifier'
         // ======================================
@@ -311,7 +307,7 @@ impl SMRNode {
             ValidatorVerifier::add_to_address_to_validator_info(
                 &mut validator_verifier,
                 twin_account_address.clone(),
-                &target_account_address
+                &target_account_address,
             );
         }
 
@@ -323,10 +319,9 @@ impl SMRNode {
         // Note: If no proposer is defined for a round, we default to the first node
         let mut twins_round_proposers: HashMap<Round, Vec<AccountAddress>> = HashMap::new();
 
-        for (round, vec_idx) in twins_round_proposers_idx.iter(){
-
+        for (round, vec_idx) in twins_round_proposers_idx.iter() {
             let mut idx_to_authors = Vec::new();
-            for idx in vec_idx.iter(){
+            for idx in vec_idx.iter() {
                 idx_to_authors.push(signers[idx.to_owned()].author());
             }
 
@@ -337,10 +332,7 @@ impl SMRNode {
             */
 
             // Leader for round 1: node0 and twin_node0
-            twins_round_proposers.insert(
-                round.to_owned(),
-                idx_to_authors
-            );
+            twins_round_proposers.insert(round.to_owned(), idx_to_authors);
         }
 
         ValidatorVerifier::set_round_to_proposers(&mut validator_verifier, twins_round_proposers);
@@ -356,7 +348,6 @@ impl SMRNode {
         };
 
         let validators = Arc::new(validator_verifier);
-
 
         // ====================
         // Start nodes
@@ -448,7 +439,7 @@ fn twins_QC_test() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.executor());
 
-    let num_nodes= 2;
+    let num_nodes = 2;
 
     // Index #s of nodes (i.e. target nodes) for which we will create twins
     let mut target_nodes = vec![];
@@ -475,7 +466,7 @@ fn twins_QC_test() {
     let mut twins_round_proposers_idx: HashMap<Round, Vec<usize>> = HashMap::new();
     // Leaders are n0 and twin1 for round 1..4
     for i in 1..5 {
-        twins_round_proposers_idx.insert(i, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
+        twins_round_proposers_idx.insert(i, vec![0, node_to_twin.get(&0).unwrap().to_owned()]);
     }
 
     // Start a network with 2 nodes and 2 twins for those nodes
@@ -487,7 +478,7 @@ fn twins_QC_test() {
         RoundProposers,
         false,
         twins_round_proposers_idx,
-        &node_to_twin
+        &node_to_twin,
     );
 
     let n0 = nodes[0].signer.author();
@@ -498,7 +489,6 @@ fn twins_QC_test() {
     let twin1 = nodes[node_to_twin.get(&1).unwrap().to_owned()]
         .signer
         .author();
-
 
     block_on(async move {
         // Two proposals (by n0 and twin0)
@@ -515,25 +505,15 @@ fn twins_QC_test() {
             .collect();
 
         // Twin leader's HQC
-        let hqc_twin0 = nodes[3]
-                .smr
-                .block_store()
-                .unwrap()
-                .highest_quorum_cert();
+        let hqc_twin0 = nodes[3].smr.block_store().unwrap().highest_quorum_cert();
 
         // Any other nodes' HQC
-        let hqc_node0 = nodes[0]
-            .smr
-            .block_store()
-            .unwrap()
-            .highest_quorum_cert();
-
+        let hqc_node0 = nodes[0].smr.block_store().unwrap().highest_quorum_cert();
 
         // Proposal from node0 and twin_node0 are going to race
         // but only one of them will form QC because quorum voting
         // power is set to 3, so ultimately they'll have the same QC
         assert_eq!(hqc_twin0, hqc_node0);
-
     });
 }
 
@@ -594,7 +574,7 @@ fn twins_drop_config_round_test() {
         RoundProposers,
         false,
         twins_round_proposers_idx,
-        &node_to_twin
+        &node_to_twin,
     );
 
     let n0 = nodes[0].signer.author();
@@ -614,7 +594,6 @@ fn twins_drop_config_round_test() {
     playground.drop_message_for_round(n0, twin1, 3);
 
     block_on(async move {
-
         // ===== Round 1 ======
 
         let _proposals = playground
@@ -661,8 +640,6 @@ fn twins_drop_config_round_test() {
             .get_block(proposed_block_id)
             .is_none());
 
-
-
         // ========= Round 2 =========
 
         let _proposals = playground
@@ -707,8 +684,6 @@ fn twins_drop_config_round_test() {
             .unwrap()
             .get_block(proposed_block_id)
             .is_some());
-
-
 
         // ===== Round 3 ======
 
@@ -757,10 +732,8 @@ fn twins_drop_config_round_test() {
             .unwrap()
             .get_block(proposed_block_id)
             .is_none());
-
     });
 }
-
 
 #[test]
 /// Checks that split_network works for twins
@@ -812,7 +785,7 @@ fn twins_split_network_test() {
         RoundProposers, //FixedProposer,
         /* executor_with_reconfig */ false,
         twins_round_proposers_idx,
-        &node_to_twin
+        &node_to_twin,
     );
 
     block_on(async move {
@@ -874,7 +847,6 @@ fn twins_split_network_test() {
     });
 }
 
-
 #[test]
 /// This test demonstrates safety violation with f+1 twins
 ///
@@ -924,14 +896,13 @@ fn twins_safety_violation_test() {
         );
     }
 
-
     // Specify round leaders here
     // Will default to the first node, if no leader specified for given round
     let mut twins_round_proposers_idx: HashMap<Round, Vec<usize>> = HashMap::new();
 
     // Make n0 and twin0 leaders for round 1..29
     for i in 1..30 {
-        twins_round_proposers_idx.insert(i, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
+        twins_round_proposers_idx.insert(i, vec![0, node_to_twin.get(&0).unwrap().to_owned()]);
     }
 
     let nodes = SMRNode::start_num_nodes_with_twins(
@@ -942,7 +913,7 @@ fn twins_safety_violation_test() {
         RoundProposers,
         /* executor_with_reconfig */ false,
         twins_round_proposers_idx,
-        &node_to_twin
+        &node_to_twin,
     );
 
     // 4 honest nodes
@@ -958,7 +929,6 @@ fn twins_safety_violation_test() {
     let twin1 = nodes[node_to_twin.get(&1).unwrap().to_owned()]
         .signer
         .author();
-
 
     // Create static network partition
     playground.split_network(vec![&n0, &n1, &n2], vec![&twin0, &twin1, &n3]);
@@ -1067,7 +1037,6 @@ fn twins_safety_violation_scenario_executor_test() {
     // twin of n1
     let twin1 = node_to_twin.get(&1).unwrap().to_owned();
 
-
     let quorum_voting_power = 3;
 
     // Specify round leaders here
@@ -1076,21 +1045,17 @@ fn twins_safety_violation_scenario_executor_test() {
 
     // Make n0 and twin0 leaders for round 1..29
     for i in 1..30 {
-        twins_round_proposers_idx.insert(i, vec![0, node_to_twin.get(&0).unwrap().to_owned()] );
+        twins_round_proposers_idx.insert(i, vec![0, node_to_twin.get(&0).unwrap().to_owned()]);
     }
 
     // Create per round partitions
 
-    let mut round_partitions_idx: HashMap<u64,Vec<Vec<usize>>> = HashMap::new();
-
+    let mut round_partitions_idx: HashMap<u64, Vec<Vec<usize>>> = HashMap::new();
 
     for round in 0..50 {
         round_partitions_idx.insert(
             /* round */ round,
-            vec![
-                    vec![n0, n1, n2],
-                    vec![twin0, twin1, n3]
-            ]
+            vec![vec![n0, n1, n2], vec![twin0, twin1, n3]],
         );
     }
 
@@ -1102,16 +1067,12 @@ fn twins_safety_violation_scenario_executor_test() {
         twins_round_proposers_idx,
         quorum_voting_power
     ));
-
 }
-
-
 
 fn create_partitions(
     playground: &mut NetworkPlayground,
-    partitions: HashMap<u64,Vec<Vec<AccountAddress>>>
+    partitions: HashMap<u64, Vec<Vec<AccountAddress>>>,
 ) -> bool {
-
     playground.split_network_round(&partitions)
 }
 
@@ -1129,7 +1090,6 @@ fn is_safe(branches: Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>) -> bool {
 //          will be printed out
 
 fn compare_vectors(vecs: &Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>) -> bool {
-
     // how many vectors need to be compared
     let num_vecs = vecs.len();
 
@@ -1144,7 +1104,7 @@ fn compare_vectors(vecs: &Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>) -> bool {
     }
     */
 
-    let (longest_idx,longest_len) = longest_vector(vecs);
+    let (longest_idx, longest_len) = longest_vector(vecs);
     //println!("Longest vector is at idx {0} with len {1}: {2:?}", longest_idx, longest_len, vecs[longest_idx]);
 
     let mut is_conflict = false;
@@ -1157,12 +1117,11 @@ fn compare_vectors(vecs: &Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>) -> bool {
 
         // in the vectors to be compared
         for vec in vecs.iter() {
-
             // Only compare if the index being compared exists
             // (because some vectors might be shorter than the longest)
             if i < vec.len() {
                 // If this is the first time comparing
-                if first_time  {
+                if first_time {
                     val = vec[i].id();
                     first_time = false;
                 }
@@ -1183,29 +1142,24 @@ fn compare_vectors(vecs: &Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>) -> bool {
     !is_conflict
 }
 
-
 // This function takes a vector of vectors, and for each vector it prints
 // out the values at the given conflicting index
 fn print_conflict(vecs: &Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>, index: usize) {
-
     println!("CONFLICT: Index {0} doesn't match, values are:", index);
 
     for vec in vecs.iter() {
         if index < vec.len() {
             println!("{0}", vec[index].id());
-        }
-        else {
+        } else {
             println!("NULL");
         }
     }
 }
 
-
 // This function takes a vector of vectors, and returns
 // (1) the longest one, if the vectors are all of different lengths, OR
 // (2) the first longest one, if multiple vectors are of that length
 fn longest_vector(vecs: &Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>) -> (usize, usize) {
-
     let mut max_len: usize = 0;
     let mut idx: usize = 0;
 
@@ -1218,21 +1172,17 @@ fn longest_vector(vecs: &Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>) -> (usize, u
         }
     }
 
-    (idx,max_len)
+    (idx, max_len)
 }
-
-
-
 
 fn execute_scenario(
     num_nodes: usize,
     target_nodes: &Vec<usize>, // the nodes for which to create twins
     node_to_twin: &HashMap<usize, usize>,
-    round_partitions_idx: HashMap<u64,Vec<Vec<usize>>>,
+    round_partitions_idx: HashMap<u64, Vec<Vec<usize>>>,
     twins_round_proposers_idx: HashMap<Round, Vec<usize>>,
-    quorum_voting_power: u64
+    quorum_voting_power: u64,
 ) -> bool {
-
     //assert_eq!(partitions.len(), leaders.len());
     //let num_of_rounds = partitions.len().clone();
 
@@ -1248,23 +1198,20 @@ fn execute_scenario(
         RoundProposers,
         /* executor_with_reconfig */ false,
         twins_round_proposers_idx,
-        &node_to_twin
+        &node_to_twin,
     );
-
 
     // Create partitions
 
-    let mut round_partitions: HashMap<u64,Vec<Vec<AccountAddress>>> = HashMap::new();
+    let mut round_partitions: HashMap<u64, Vec<Vec<AccountAddress>>> = HashMap::new();
 
     // The partitions have been provided in terms of node indices
     // Below we just transform those to AccountAddress, which is what
     // is expected  by 'create_partitions'
-    for (round,partitions) in round_partitions_idx.iter() {
-
+    for (round, partitions) in round_partitions_idx.iter() {
         let mut round_account_addrs: Vec<Vec<AccountAddress>> = Vec::new();
 
         for part in partitions.iter() {
-
             let mut account_addrs: Vec<AccountAddress> = Vec::new();
 
             for idx in part.iter() {
@@ -1280,7 +1227,6 @@ fn execute_scenario(
     // Create partitions
     create_partitions(&mut playground, round_partitions);
     // playground.print_drop_config_round();
-
 
     // Start sending messages
 
@@ -1331,7 +1277,6 @@ fn execute_scenario(
     is_this_safe
 }
 
-
 // A memory-inefficient implementation of all solutions of Stirling number
 // of second kind (https://en.wikipedia.org/wiki/Stirling_numbers_of_the_second_kind).
 // This will probably not work for n > 20.
@@ -1345,20 +1290,20 @@ fn stirling2(n: usize, k: usize) -> Vec<Vec<Vec<usize>>> {
         }
         return ret;
     } else {
-        let mut s_n_1_k_1 = stirling2(n-1, k-1);
+        let mut s_n_1_k_1 = stirling2(n - 1, k - 1);
         for v in &mut s_n_1_k_1 {
-            v.push(vec![n-1]);
+            v.push(vec![n - 1]);
         }
 
         let mut k_s_n_1_k = Vec::new();
-        let tmp = stirling2(n-1, k);
+        let tmp = stirling2(n - 1, k);
         for i in (0..k) {
             k_s_n_1_k.extend(tmp.iter().cloned());
         }
-        let size = k*tmp.len();
+        let size = k * tmp.len();
         for i in (0..size) {
             let j = i / tmp.len() as usize;
-            k_s_n_1_k[i][j].push(n-1);
+            k_s_n_1_k[i][j].push(n - 1);
         }
 
         s_n_1_k_1.extend(k_s_n_1_k.iter().cloned());
@@ -1370,33 +1315,39 @@ fn stirling2(n: usize, k: usize) -> Vec<Vec<Vec<usize>>> {
 /// cargo xtest -p consensus test_stirling2 -- --nocapture
 fn test_stirling2() {
     let mut ret = stirling2(4, 3);
-    assert_eq!(ret, vec![
-        vec![vec![0,1], vec![2], vec![3]],
-        vec![vec![0,2], vec![1], vec![3]],
-        vec![vec![0], vec![1,2], vec![3]],
-        vec![vec![0,3], vec![1], vec![2]],
-        vec![vec![0], vec![1,3], vec![2]],
-        vec![vec![0], vec![1], vec![2,3]],
-    ]);
+    assert_eq!(
+        ret,
+        vec![
+            vec![vec![0, 1], vec![2], vec![3]],
+            vec![vec![0, 2], vec![1], vec![3]],
+            vec![vec![0], vec![1, 2], vec![3]],
+            vec![vec![0, 3], vec![1], vec![2]],
+            vec![vec![0], vec![1, 3], vec![2]],
+            vec![vec![0], vec![1], vec![2, 3]],
+        ]
+    );
 
     ret = stirling2(5, 2);
-    assert_eq!(ret, vec![
-        vec![vec![0, 1, 2, 3], vec![4]],
-        vec![vec![0, 1, 2, 4], vec![3]],
-        vec![vec![0, 1, 3, 4], vec![2]],
-        vec![vec![0, 2, 3, 4], vec![1]],
-        vec![vec![0, 3, 4], vec![1, 2]],
-        vec![vec![0, 1, 4], vec![2, 3]],
-        vec![vec![0, 2, 4], vec![1, 3]],
-        vec![vec![0, 4], vec![1, 2, 3]],
-        vec![vec![0, 1, 2], vec![3, 4]],
-        vec![vec![0, 1, 3], vec![2, 4]],
-        vec![vec![0, 2, 3], vec![1, 4]],
-        vec![vec![0, 3], vec![1, 2, 4]],
-        vec![vec![0, 1], vec![2, 3, 4]],
-        vec![vec![0, 2], vec![1, 3, 4]],
-        vec![vec![0], vec![1, 2, 3, 4]],
-    ]);
+    assert_eq!(
+        ret,
+        vec![
+            vec![vec![0, 1, 2, 3], vec![4]],
+            vec![vec![0, 1, 2, 4], vec![3]],
+            vec![vec![0, 1, 3, 4], vec![2]],
+            vec![vec![0, 2, 3, 4], vec![1]],
+            vec![vec![0, 3, 4], vec![1, 2]],
+            vec![vec![0, 1, 4], vec![2, 3]],
+            vec![vec![0, 2, 4], vec![1, 3]],
+            vec![vec![0, 4], vec![1, 2, 3]],
+            vec![vec![0, 1, 2], vec![3, 4]],
+            vec![vec![0, 1, 3], vec![2, 4]],
+            vec![vec![0, 2, 3], vec![1, 4]],
+            vec![vec![0, 3], vec![1, 2, 4]],
+            vec![vec![0, 1], vec![2, 3, 4]],
+            vec![vec![0, 2], vec![1, 3, 4]],
+            vec![vec![0], vec![1, 2, 3, 4]],
+        ]
+    );
 
     ret = stirling2(10, 4);
     assert_eq!(ret.len(), 34105);
@@ -1409,13 +1360,13 @@ fn test_stirling2() {
 // to produce useful results.
 fn filter_partitions(
     list_of_partitions: Vec<Vec<Vec<usize>>>,
-    num_of_nodes: usize
+    num_of_nodes: usize,
 ) -> Vec<Vec<Vec<usize>>> {
     // Find the index of bad and twin nodes.
     // By convention, the first f nodes are bad, and the last f are their twins.
-    let f: usize = (num_of_nodes-1) / 3;
+    let f: usize = (num_of_nodes - 1) / 3;
     let bad_nodes: Vec<usize> = (0..f).collect();
-    let twin_nodes: Vec<usize> = (num_of_nodes..num_of_nodes+f).collect();
+    let twin_nodes: Vec<usize> = (num_of_nodes..num_of_nodes + f).collect();
 
     // Remove partitions.
     let mut filtered_list_of_partitions = Vec::new();
@@ -1443,49 +1394,42 @@ fn filter_partitions(
 fn test_filter_partitions() {
     let num_of_nodes = 4;
     let f = 1;
-    let list_of_partitions = stirling2(num_of_nodes+f, 2);
+    let list_of_partitions = stirling2(num_of_nodes + f, 2);
     let filtered_list_of_partitions = filter_partitions(list_of_partitions, num_of_nodes);
-    assert_eq!(filtered_list_of_partitions, vec![
-        vec![vec![0, 1, 2, 3], vec![4]],
-        //vec![vec![0, 1, 2, 4], vec![3]],
-        //vec![vec![0, 1, 3, 4], vec![2]],
-        //vec![vec![0, 2, 3, 4], vec![1]],
-        //vec![vec![0, 3, 4], vec![1, 2]],
-        //vec![vec![0, 1, 4], vec![2, 3]],
-        //vec![vec![0, 2, 4], vec![1, 3]],
-        //vec![vec![0, 4], vec![1, 2, 3]],
-        vec![vec![0, 1, 2], vec![3, 4]],
-        vec![vec![0, 1, 3], vec![2, 4]],
-        vec![vec![0, 2, 3], vec![1, 4]],
-        vec![vec![0, 3], vec![1, 2, 4]],
-        vec![vec![0, 1], vec![2, 3, 4]],
-        vec![vec![0, 2], vec![1, 3, 4]],
-        vec![vec![0], vec![1, 2, 3, 4]],
-    ]);
+    assert_eq!(
+        filtered_list_of_partitions,
+        vec![
+            vec![vec![0, 1, 2, 3], vec![4]],
+            //vec![vec![0, 1, 2, 4], vec![3]],
+            //vec![vec![0, 1, 3, 4], vec![2]],
+            //vec![vec![0, 2, 3, 4], vec![1]],
+            //vec![vec![0, 3, 4], vec![1, 2]],
+            //vec![vec![0, 1, 4], vec![2, 3]],
+            //vec![vec![0, 2, 4], vec![1, 3]],
+            //vec![vec![0, 4], vec![1, 2, 3]],
+            vec![vec![0, 1, 2], vec![3, 4]],
+            vec![vec![0, 1, 3], vec![2, 4]],
+            vec![vec![0, 2, 3], vec![1, 4]],
+            vec![vec![0, 3], vec![1, 2, 4]],
+            vec![vec![0, 1], vec![2, 3, 4]],
+            vec![vec![0, 2], vec![1, 3, 4]],
+            vec![vec![0], vec![1, 2, 3, 4]],
+        ]
+    );
 }
 
-fn filter_partitions_pick_n(
-    list_of_partitions: &mut Vec<Vec<Vec<usize>>>,
-    n: usize) {
-
+fn filter_partitions_pick_n(list_of_partitions: &mut Vec<Vec<Vec<usize>>>, n: usize) {
     if n < list_of_partitions.len() {
-
         let mut rng = rand::thread_rng();
-
         let mut dice = rng.gen_range(0, list_of_partitions.len());
-
         let mut seen = Vec::new();
-
         for i in 0..n {
             list_of_partitions[i] = list_of_partitions[dice].clone();
-
             seen.push(dice);
-
             while seen.contains(&dice) {
                 dice = rng.gen_range(0, list_of_partitions.len());
             }
         }
-
         list_of_partitions.truncate(n);
     }
 }
@@ -1534,7 +1478,6 @@ fn twins_test_safety_attack_generator() {
     let mut twin_nodes: Vec<usize> = (NUM_OF_NODES..NUM_OF_NODES + f).collect();
     nodes.append(&mut twin_nodes.clone());
 
-
     // `node_to_twin` is required by `execute_scenario()` which we call
     //  at the end to execute generated scenarios.
     // `node_to_twin` maps `bad_nodes` to twins indices in 'nodes'
@@ -1548,7 +1491,6 @@ fn twins_test_safety_attack_generator() {
         let twin_index = NUM_OF_NODES + each;
         node_to_twin.insert(*target, twin_index);
     }
-
 
     // =============================================
     //
@@ -1564,7 +1506,6 @@ fn twins_test_safety_attack_generator() {
     //
     // =============================================
 
-
     // This problems is known as "Stirling Number of the Second Kind".
     // "In combinatorics, the Stirling numbers of the second kind tell
     // us how many ways there are of dividing up a set of n objects
@@ -1577,9 +1518,6 @@ fn twins_test_safety_attack_generator() {
     // of them from the list if the tests take too much time.
 
     let mut partition_scenarios = stirling2(nodes.len(), NUM_OF_PARTITIONS);
-
-    //println!("{:?}",partition_scenarios);
-
     println!(
         "There are {:?} ways to allocate {:?} nodes ({:?} honest nodes + {:?} node-twin pairs) into {:?} partitions.",
         partition_scenarios.len(), nodes.len(), NUM_OF_NODES-f, f, NUM_OF_PARTITIONS
@@ -1593,9 +1531,9 @@ fn twins_test_safety_attack_generator() {
     filter_partitions_pick_n(&mut partition_scenarios, 2);
     println!(
         "After filtering, we have {:?} partition scenarios (we filtered out {:?} scenarios).",
-        partition_scenarios.len(), old_list_of_partition_length - partition_scenarios.len()
+        partition_scenarios.len(),
+        old_list_of_partition_length - partition_scenarios.len()
     );
-
 
     // =============================================
     //
@@ -1609,7 +1547,6 @@ fn twins_test_safety_attack_generator() {
     // { (bad_node1, twin_node1), (bad_node2, twin_node2), (bad_node3, twin_node3), ..}
     //
     // =============================================
-
 
     // Find all combinations of leaders and partition scenarios.
     //
@@ -1637,26 +1574,19 @@ fn twins_test_safety_attack_generator() {
 
     // In `partition_scenarios_with_leaders` each element is a pair of leader and
     // partition scenario
-
     let mut partition_scenarios_with_leaders = Vec::new();
 
     // We only add bad_nodes as leaders here, and the twin_node corresponding to bad_nodes
     // will be added as a leader implicitly by the scenario executor
     for each_leader in &bad_nodes {
-
         for each_scenario in &partition_scenarios {
-
-            let pair =  (each_leader, each_scenario.clone());
+            let pair = (each_leader, each_scenario.clone());
             partition_scenarios_with_leaders.push(pair);
-
         }
     }
 
     // Don't need this any more
     partition_scenarios.clear();
-
-    //println!("{0:?}", partition_scenarios_with_leaders);
-
     println!(
         "After combining leaders with partition scenarios, we have {:?} scenario-leader combinations).",
         partition_scenarios_with_leaders
@@ -1671,49 +1601,30 @@ fn twins_test_safety_attack_generator() {
     // the same scenarios for multiple rounds (which is not implemented).
     assert!(partition_scenarios_with_leaders.len() > NUM_OF_ROUNDS);
 
-    let test_cases = partition_scenarios_with_leaders.iter().permutations(NUM_OF_ROUNDS);
-
-    /*
-    for each in test_cases {
-        println!("{0:?}",each);
-    }
-    */
-
-    //println!("Total number of test cases generated by scenario_generator: {:?}", test_cases.collect().len());
-
+    let test_cases = partition_scenarios_with_leaders
+        .iter()
+        .permutations(NUM_OF_ROUNDS);
 
     // =============================================
     // Now we are ready to prepare and execute each scenario via the executor
     // =============================================
 
-
     let mut round = 1;
-
     for each_test in test_cases {
-
         let mut round_partitions_idx = HashMap::new();
-
         let mut twins_round_proposers_idx = HashMap::new();
-
         for round_scenario in each_test {
-
             let leader = round_scenario.0.clone();
             let scenario = round_scenario.1.clone();
-
             let mut leaders = Vec::new();
             leaders.push(leader.clone());
-
             // If a bad node is leader, make its twin the leader too
             if bad_nodes.contains(&leader) {
                 let twin_node = node_to_twin.get(&leader).unwrap().clone();
-
                 leaders.push(twin_node.clone());
             }
-
             twins_round_proposers_idx.insert(round, leaders);
-
             round_partitions_idx.insert(round, scenario);
-
             round += 1;
         }
 
@@ -1721,20 +1632,14 @@ fn twins_test_safety_attack_generator() {
             nodes.len(),
             &bad_nodes,
             &node_to_twin,
-            round_partitions_idx, // changes for each test
+            round_partitions_idx,      // changes for each test
             twins_round_proposers_idx, // changes for each test
             QUORUM_VOTING_POWER
         ));
 
         thread::sleep(time::Duration::from_secs(2));
     }
-
-    // println!("twins_round_proposers_idx is: {:?}", twins_round_proposers_idx);
-    // println!("round_partitions_idx is: {:?}", round_partitions_idx);
-
 }
-
-
 
 // ===============================
 // Regular (i.e. non-Twins) tests
@@ -1936,7 +1841,6 @@ async fn basic_commit(
         .await;
 }
 
-
 /// Verify the basic e2e flow: blocks are committed, txn manager is notified, block tree is
 /// pruned, restart the node and we can still continue.
 #[test]
@@ -2046,7 +1950,6 @@ fn basic_commit_and_restart_from_clean_storage() {
         );
     });
 }
-
 
 #[test]
 fn basic_block_retrieval() {

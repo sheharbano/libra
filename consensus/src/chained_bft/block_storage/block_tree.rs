@@ -361,8 +361,8 @@ where
                     println!("BlockTree: NONE get_block");
                     println!("=======================");
                     */
-                    return None
-                },
+                    return None;
+                }
             }
         }
         // At this point cur_block.round() <= self.root.round()

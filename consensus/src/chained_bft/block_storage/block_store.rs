@@ -388,9 +388,7 @@ impl<T: Payload> BlockReader for BlockStore<T> {
     }
 
     fn path_from_root(&self, block_id: HashValue) -> Option<Vec<Arc<ExecutedBlock<T>>>> {
-
         let res = self.inner.read().unwrap().path_from_root(block_id).unwrap();
-
 
         /*
         println!("=======================");
@@ -406,7 +404,6 @@ impl<T: Payload> BlockReader for BlockStore<T> {
             println!("=======================");
         }
         */
-
 
         Some(res)
     }

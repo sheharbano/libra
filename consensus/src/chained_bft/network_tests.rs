@@ -458,39 +458,41 @@ impl NetworkPlayground {
         ret
     }
 
-    pub fn split_network_round(&mut self,  round_partitions: &HashMap<u64,Vec<Vec<AccountAddress>>>) -> bool {
-
+    pub fn split_network_round(
+        &mut self,
+        round_partitions: &HashMap<u64, Vec<Vec<AccountAddress>>>,
+    ) -> bool {
         let mut ret = true;
 
         for (round, partitions) in round_partitions.iter() {
-
             //print!("\n");
 
-            let idx_last_part = partitions.len()-1;
+            let idx_last_part = partitions.len() - 1;
 
-            for (idx_part,part) in partitions.iter().enumerate() {
-
+            for (idx_part, part) in partitions.iter().enumerate() {
                 if idx_part < idx_last_part {
-
                     let idx_start_part = idx_part;
 
-                    for src in part.iter(){
-
-                        for idx_next_part in (idx_start_part+1)..idx_last_part+1 {
-
+                    for src in part.iter() {
+                        for idx_next_part in (idx_start_part + 1)..idx_last_part + 1 {
                             for dst in partitions[idx_next_part].iter() {
-
                                 //print!("({0}:{1},{2}), ",round,src.short_str(),dst.short_str());
                                 //print!("({0}:{1},{2}), ",round,dst.short_str(),src.short_str());
 
                                 // Drop messages in both directions i.e. src->dst and dst->src
-                                ret &= self.drop_message_for_round(src.clone(), dst.clone(), round.clone());
-                                ret &= self.drop_message_for_round(dst.clone(), src.clone(), round.clone());
+                                ret &= self.drop_message_for_round(
+                                    src.clone(),
+                                    dst.clone(),
+                                    round.clone(),
+                                );
+                                ret &= self.drop_message_for_round(
+                                    dst.clone(),
+                                    src.clone(),
+                                    round.clone(),
+                                );
                             }
                         }
-
                     }
-
                 }
             }
             //print!("\n");
@@ -499,29 +501,24 @@ impl NetworkPlayground {
         ret
     }
 
-
-    pub fn stop_split_network_round(&mut self,  round_partitions: &HashMap<u64,Vec<Vec<AccountAddress>>>) -> bool {
-
+    pub fn stop_split_network_round(
+        &mut self,
+        round_partitions: &HashMap<u64, Vec<Vec<AccountAddress>>>,
+    ) -> bool {
         let mut ret = true;
 
         for (round, partitions) in round_partitions.iter() {
-
             //print!("\n");
 
-            let idx_last_part = partitions.len()-1;
+            let idx_last_part = partitions.len() - 1;
 
-            for (idx_part,part) in partitions.iter().enumerate() {
-
+            for (idx_part, part) in partitions.iter().enumerate() {
                 if idx_part < idx_last_part {
-
                     let idx_start_part = idx_part;
 
-                    for src in part.iter(){
-
-                        for idx_next_part in (idx_start_part+1)..idx_last_part+1 {
-
+                    for src in part.iter() {
+                        for idx_next_part in (idx_start_part + 1)..idx_last_part + 1 {
                             for dst in partitions[idx_next_part].iter() {
-
                                 //print!("({0}:{1},{2}), ",round,src.short_str(),dst.short_str());
                                 //print!("({0}:{1},{2}), ",round,dst.short_str(),src.short_str());
 
@@ -530,9 +527,7 @@ impl NetworkPlayground {
                                 ret &= self.stop_drop_message_for_round(dst, src, round.clone());
                             }
                         }
-
                     }
-
                 }
             }
             //print!("\n");
@@ -540,7 +535,6 @@ impl NetworkPlayground {
 
         ret
     }
-
 }
 
 struct DropConfig(HashMap<Author, HashSet<Author>>);
@@ -574,7 +568,6 @@ impl DropConfig {
 
 #[test]
 fn test_drop_message_for_round() {
-
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.executor());
 
@@ -586,16 +579,23 @@ fn test_drop_message_for_round() {
         nodes.push(signer.author());
     }
 
-    playground.drop_message_for_round(nodes[0],  nodes[1], 1);
-    playground.drop_message_for_round(nodes[2],  nodes[3], 2);
+    playground.drop_message_for_round(nodes[0], nodes[1], 1);
+    playground.drop_message_for_round(nodes[2], nodes[3], 2);
 
-    assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[0],nodes[1],1));
-    assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[2],nodes[3],2));
+    assert!(playground
+        .drop_config_round
+        .read()
+        .unwrap()
+        .is_message_dropped(nodes[0], nodes[1], 1));
+    assert!(playground
+        .drop_config_round
+        .read()
+        .unwrap()
+        .is_message_dropped(nodes[2], nodes[3], 2));
 }
 
 #[test]
 fn test_stop_drop_message_for_round() {
-
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.executor());
 
@@ -607,21 +607,28 @@ fn test_stop_drop_message_for_round() {
         nodes.push(signer.author());
     }
 
-    playground.drop_message_for_round(nodes[0],  nodes[1], 1);
+    playground.drop_message_for_round(nodes[0], nodes[1], 1);
 
     // Check the filter rule has been added
-    assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[0],nodes[1],1));
+    assert!(playground
+        .drop_config_round
+        .read()
+        .unwrap()
+        .is_message_dropped(nodes[0], nodes[1], 1));
 
     // Remove the rule
-    playground.stop_drop_message_for_round(&nodes[0],  &nodes[1], 1);
+    playground.stop_drop_message_for_round(&nodes[0], &nodes[1], 1);
 
     // This rule shouldn't exist any more
-    assert!(!playground.drop_config_round.read().unwrap().is_message_dropped(nodes[0],nodes[1],1));
+    assert!(!playground
+        .drop_config_round
+        .read()
+        .unwrap()
+        .is_message_dropped(nodes[0], nodes[1], 1));
 }
 
 #[test]
 fn test_split_network_round() {
-
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.executor());
 
@@ -635,15 +642,16 @@ fn test_split_network_round() {
 
     // Create per round partitions
 
-    let mut round_partitions: HashMap<u64,Vec<Vec<AccountAddress>>> = HashMap::new();
+    let mut round_partitions: HashMap<u64, Vec<Vec<AccountAddress>>> = HashMap::new();
 
     for round in 0..3 {
         round_partitions.insert(
             /* round */ round,
-            vec![ vec![nodes[0]],
-                 vec![nodes[1], nodes[2]],
-                 vec![nodes[3], nodes[4]]
-            ]
+            vec![
+                vec![nodes[0]],
+                vec![nodes[1], nodes[2]],
+                vec![nodes[3], nodes[4]],
+            ],
         );
     }
 
@@ -654,50 +662,109 @@ fn test_split_network_round() {
     playground.print_drop_config_round();
 
     for round in 0..3 {
-
         // The partitions are (for each of  3 rounds): [0], [1,2], [3,4]
         // So we should have the following filter rules
 
         // [0->1] [1->0]
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[0],nodes[1],round));
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[1],nodes[0],round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[0], nodes[1], round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[1], nodes[0], round));
 
         // [0->2] [2->0]
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[0],nodes[2],round));
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[2],nodes[0],round));
-
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[0], nodes[2], round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[2], nodes[0], round));
 
         // [0->3] [3->0]
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[0],nodes[3],round));
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[3],nodes[0],round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[0], nodes[3], round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[3], nodes[0], round));
 
         // [0->4] [4->0]
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[0],nodes[4],round));
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[4],nodes[0],round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[0], nodes[4], round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[4], nodes[0], round));
 
         // [1->3] [3->1]
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[1],nodes[3],round));
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[3],nodes[1],round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[1], nodes[3], round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[3], nodes[1], round));
 
         // [1->4] [4->1]
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[1],nodes[4],round));
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[4],nodes[1],round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[1], nodes[4], round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[4], nodes[1], round));
 
         // [2->3] [3->2]
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[2],nodes[3],round));
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[3],nodes[2],round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[2], nodes[3], round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[3], nodes[2], round));
 
         // [2->4] [4->2]
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[2],nodes[4],round));
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[4],nodes[2],round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[2], nodes[4], round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[4], nodes[2], round));
     }
 }
 
-
-
 #[test]
 fn test_stop_split_network_round() {
-
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.executor());
 
@@ -711,15 +778,16 @@ fn test_stop_split_network_round() {
 
     // Create per round partitions
 
-    let mut round_partitions: HashMap<u64,Vec<Vec<AccountAddress>>> = HashMap::new();
+    let mut round_partitions: HashMap<u64, Vec<Vec<AccountAddress>>> = HashMap::new();
 
     for round in 0..3 {
         round_partitions.insert(
             /* round */ round,
-            vec![ vec![nodes[0]],
-                  vec![nodes[1], nodes[2]],
-                  vec![nodes[3], nodes[4]]
-            ]
+            vec![
+                vec![nodes[0]],
+                vec![nodes[1], nodes[2]],
+                vec![nodes[3], nodes[4]],
+            ],
         );
     }
 
@@ -732,42 +800,104 @@ fn test_stop_split_network_round() {
     //playground.print_drop_config_round();
 
     for round in 0..3 {
-
         // The partitions are (for each of  3 rounds): [0], [1,2], [3,4]
         // So we should have the following filter rules
 
         // [0->1] [1->0]
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[0],nodes[1],round));
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[1],nodes[0],round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[0], nodes[1], round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[1], nodes[0], round));
 
         // [0->2] [2->0]
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[0],nodes[2],round));
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[2],nodes[0],round));
-
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[0], nodes[2], round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[2], nodes[0], round));
 
         // [0->3] [3->0]
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[0],nodes[3],round));
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[3],nodes[0],round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[0], nodes[3], round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[3], nodes[0], round));
 
         // [0->4] [4->0]
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[0],nodes[4],round));
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[4],nodes[0],round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[0], nodes[4], round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[4], nodes[0], round));
 
         // [1->3] [3->1]
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[1],nodes[3],round));
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[3],nodes[1],round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[1], nodes[3], round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[3], nodes[1], round));
 
         // [1->4] [4->1]
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[1],nodes[4],round));
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[4],nodes[1],round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[1], nodes[4], round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[4], nodes[1], round));
 
         // [2->3] [3->2]
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[2],nodes[3],round));
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[3],nodes[2],round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[2], nodes[3], round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[3], nodes[2], round));
 
         // [2->4] [4->2]
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[2],nodes[4],round));
-        assert!(playground.drop_config_round.read().unwrap().is_message_dropped(nodes[4],nodes[2],round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[2], nodes[4], round));
+        assert!(playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[4], nodes[2], round));
     }
 
     println!("Stop dropping the previous messages");
@@ -777,66 +907,119 @@ fn test_stop_split_network_round() {
     playground.print_drop_config_round();
 
     for round in 0..3 {
-
         // The following filter rules should no longer be there
 
         // [0->1] [1->0]
-        assert!(!playground.drop_config_round.read().unwrap().is_message_dropped(nodes[0],nodes[1],round));
-        assert!(!playground.drop_config_round.read().unwrap().is_message_dropped(nodes[1],nodes[0],round));
+        assert!(!playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[0], nodes[1], round));
+        assert!(!playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[1], nodes[0], round));
 
         // [0->2] [2->0]
-        assert!(!playground.drop_config_round.read().unwrap().is_message_dropped(nodes[0],nodes[2],round));
-        assert!(!playground.drop_config_round.read().unwrap().is_message_dropped(nodes[2],nodes[0],round));
-
+        assert!(!playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[0], nodes[2], round));
+        assert!(!playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[2], nodes[0], round));
 
         // [0->3] [3->0]
-        assert!(!playground.drop_config_round.read().unwrap().is_message_dropped(nodes[0],nodes[3],round));
-        assert!(!playground.drop_config_round.read().unwrap().is_message_dropped(nodes[3],nodes[0],round));
+        assert!(!playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[0], nodes[3], round));
+        assert!(!playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[3], nodes[0], round));
 
         // [0->4] [4->0]
-        assert!(!playground.drop_config_round.read().unwrap().is_message_dropped(nodes[0],nodes[4],round));
-        assert!(!playground.drop_config_round.read().unwrap().is_message_dropped(nodes[4],nodes[0],round));
+        assert!(!playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[0], nodes[4], round));
+        assert!(!playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[4], nodes[0], round));
 
         // [1->3] [3->1]
-        assert!(!playground.drop_config_round.read().unwrap().is_message_dropped(nodes[1],nodes[3],round));
-        assert!(!playground.drop_config_round.read().unwrap().is_message_dropped(nodes[3],nodes[1],round));
+        assert!(!playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[1], nodes[3], round));
+        assert!(!playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[3], nodes[1], round));
 
         // [1->4] [4->1]
-        assert!(!playground.drop_config_round.read().unwrap().is_message_dropped(nodes[1],nodes[4],round));
-        assert!(!playground.drop_config_round.read().unwrap().is_message_dropped(nodes[4],nodes[1],round));
+        assert!(!playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[1], nodes[4], round));
+        assert!(!playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[4], nodes[1], round));
 
         // [2->3] [3->2]
-        assert!(!playground.drop_config_round.read().unwrap().is_message_dropped(nodes[2],nodes[3],round));
-        assert!(!playground.drop_config_round.read().unwrap().is_message_dropped(nodes[3],nodes[2],round));
+        assert!(!playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[2], nodes[3], round));
+        assert!(!playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[3], nodes[2], round));
 
         // [2->4] [4->2]
-        assert!(!playground.drop_config_round.read().unwrap().is_message_dropped(nodes[2],nodes[4],round));
-        assert!(!playground.drop_config_round.read().unwrap().is_message_dropped(nodes[4],nodes[2],round));
+        assert!(!playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[2], nodes[4], round));
+        assert!(!playground
+            .drop_config_round
+            .read()
+            .unwrap()
+            .is_message_dropped(nodes[4], nodes[2], round));
     }
-
 }
 
-
-
-
-fn print_round_partitions(round_partitions: &HashMap<u64,Vec<Vec<AccountAddress>>>){
-
+fn print_round_partitions(round_partitions: &HashMap<u64, Vec<Vec<AccountAddress>>>) {
     println!("=========================");
     println!("Printing round partitions.");
     println!("=========================");
 
-    for (round,partitions) in round_partitions.iter() {
-
-        print!("{0}: ",round);
+    for (round, partitions) in round_partitions.iter() {
+        print!("{0}: ", round);
 
         for part in partitions.iter() {
-
             print!("[");
 
             for item in part.iter() {
-
-                print!("{0},",item.short_str());
-
+                print!("{0},", item.short_str());
             }
             print!("] ");
         }
@@ -886,11 +1069,16 @@ impl DropConfigRound {
     }
 
     pub fn stop_drop_message_for(&mut self, src: &Author, dst: &Author, round: u64) -> bool {
-        self.0.get_mut(&round).unwrap().0.get_mut(src).unwrap().remove(dst)
+        self.0
+            .get_mut(&round)
+            .unwrap()
+            .0
+            .get_mut(src)
+            .unwrap()
+            .remove(dst)
     }
 
-    pub fn print(& self) {
-
+    pub fn print(&self) {
         println!("=========================");
         println!("Printing DropConfigRound.");
         println!("=========================");
@@ -925,12 +1113,12 @@ use consensus_types::block_retrieval::{
     BlockRetrievalRequest, BlockRetrievalResponse, BlockRetrievalStatus,
 };
 use libra_crypto::HashValue;
+use libra_types::account_address::AccountAddress;
 #[cfg(test)]
 use libra_types::crypto_proxies::random_validator_verifier;
 
 use libra_types::validator_verifier::ValidatorVerifier;
 use std::convert::{TryFrom, TryInto};
-use libra_types::account_address::AccountAddress;
 
 #[test]
 fn test_network_api() {
