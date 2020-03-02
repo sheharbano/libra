@@ -38,7 +38,7 @@ use crate::chained_bft::liveness::pacemaker::{ExponentialTimeInterval, Pacemaker
 use crate::chained_bft::liveness::proposal_generator::ProposalGenerator;
 use crate::chained_bft::liveness::proposer_election::ProposerElection;
 use crate::chained_bft::liveness::rotating_proposer_election::{choose_leader, RotatingProposer};
-use crate::chained_bft::liveness::round_proposers_election::{RoundProposers};
+use crate::chained_bft::liveness::round_proposers_election::RoundProposers;
 use crate::chained_bft::network::NetworkSender;
 use crate::chained_bft::persistent_storage::{PersistentStorage, RecoveryData};
 use crate::counters;
@@ -186,7 +186,7 @@ impl<T: Payload> EpochManager<T> {
             ConsensusProposerType::RoundProposers => Box::new(RoundProposers::new(
                 round_proposers,
                 // default proposer is set to the first validator
-                proposers[0]
+                proposers[0],
             )),
             // We don't really have a fixed proposer!
             ConsensusProposerType::FixedProposer => {

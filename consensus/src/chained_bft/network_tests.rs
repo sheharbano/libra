@@ -34,16 +34,11 @@ use std::{
 };
 use tokio::runtime::Handle;
 
-use network::{
-    proto::{
-        Proposal, RequestBlock, RequestEpoch,
-        SyncInfo as SyncInfoProto, VoteMsg as VoteMsgProto,
-    }
+use network::proto::{
+    Proposal, RequestBlock, RequestEpoch, SyncInfo as SyncInfoProto, VoteMsg as VoteMsgProto,
 };
 
-use consensus_types::{
-    proposal_msg::{ProposalUncheckedSignatures}
-};
+use consensus_types::proposal_msg::ProposalUncheckedSignatures;
 
 /// `NetworkPlayground` mocks the network implementation and provides convenience
 /// methods for testing. Test clients can use `wait_for_messages` or
@@ -192,25 +187,27 @@ impl NetworkPlayground {
         self.executor.spawn(futures::future::join(fut1, fut2));
     }
 
+<<<<<<< HEAD
     fn get_message_round(&self, src: Author, msg: ConsensusMsg)-> u64 {
 
+=======
+    fn get_message_round(&self, src: Author, msg: ConsensusMsg) -> u64 {
+>>>>>>> 66928da8... Minor fix & run cargo fmt
         use ConsensusMsg_oneof::*;
 
         match msg.message {
-
             Some(Proposal(proposal)) => {
-
                 let the_proposal: ProposalMsg<Vec<u64>> =
                     ProposalUncheckedSignatures::<Vec<u64>>::try_from(proposal)
                         .unwrap()
                         .into();
                 the_proposal.round()
-            },
+            }
 
             Some(VoteMsg(vote)) => {
                 let vote = consensus_types::vote_msg::VoteMsg::try_from(vote).unwrap();
                 vote.vote().vote_data().proposed().round()
-            },
+            }
 
             // The messages below are not specific to consensus and do not
             // carry a round number. Per round blocking therefore only works
@@ -222,12 +219,16 @@ impl NetworkPlayground {
             */
             //_ => None,
             //_ => (msg, 999)
-            _ => 999
+            _ => 999,
         }
     }
 
+<<<<<<< HEAD
 
     /// Deliver a `PeerManagerRequest` from peer `src` to the destination peer.
+=======
+    /// Deliver a `NetworkRequest` from peer `src` to the destination peer.
+>>>>>>> 66928da8... Minor fix & run cargo fmt
     /// Returns a copy of the delivered message and the sending peer id.
     async fn deliver_message<T: Payload>(
         &mut self,
@@ -290,17 +291,15 @@ impl NetworkPlayground {
 
         // println!("Checking drop policy: Is {0} to {1} dropped in Round {2}? {3}",src, dst, round, self.is_message_dropped_round(src.clone(), dst.clone(), round));
 
-        if(!self.is_message_dropped_round(src.clone(), dst.clone(), round)) {
+        if (!self.is_message_dropped_round(src.clone(), dst.clone(), round)) {
             node_consensus_tx.send(msg_notif).await.unwrap();
             delivered = true;
-        }
-        else {
-            println!("Dropping message {0} -> {1} in Round {2}?",src, dst, round );
+        } else {
+            println!("Dropping message {0} -> {1} in Round {2}?", src, dst, round);
         }
 
         (delivered, msg_copy)
     }
-
 
     /// Wait for exactly `num_messages` to be enqueued and delivered. Return a
     /// copy of all messages for verification.
@@ -322,7 +321,7 @@ impl NetworkPlayground {
 
             // Deliver and copy message it if it's not dropped
             if !self.is_message_dropped(&src, &net_req) {
-            //if !self.is_message_dropped(&src, &dst) {
+                //if !self.is_message_dropped(&src, &dst) {
                 let (delivered, msg_copy) = self.deliver_message(src, net_req).await;
                 //node_consensus_tx.send(msg_notif).await.unwrap();
 
@@ -385,13 +384,17 @@ impl NetworkPlayground {
         }
     }
 
+<<<<<<< HEAD
     fn is_message_dropped(&self, src: &Author, net_req: &PeerManagerRequest) -> bool {
+=======
+    fn is_message_dropped(&self, src: &Author, net_req: &NetworkRequest) -> bool {
+        //fn is_message_dropped(&self, src: &Author, dst: &Author) -> bool {
+>>>>>>> 66928da8... Minor fix & run cargo fmt
         self.drop_config
             .read()
             .unwrap()
             .is_message_dropped(src, net_req)
     }
-
 
     pub fn is_message_dropped_round(&self, src: Author, dst: Author, round: u64) -> bool {
         self.drop_config_round
@@ -400,13 +403,15 @@ impl NetworkPlayground {
             .is_message_dropped(src, dst, round)
     }
 
-
     pub fn drop_message_for(&mut self, src: &Author, dst: Author) -> bool {
         self.drop_config.write().unwrap().drop_message_for(src, dst)
     }
 
     pub fn drop_message_for_round(&mut self, src: Author, dst: Author, round: u64) -> bool {
-        self.drop_config_round.write().unwrap().drop_message_for(src, dst, round)
+        self.drop_config_round
+            .write()
+            .unwrap()
+            .drop_message_for(src, dst, round)
     }
 
     pub fn stop_drop_message_for(&mut self, src: &Author, dst: &Author) -> bool {
@@ -417,32 +422,37 @@ impl NetworkPlayground {
     }
 
     pub fn split_network(&mut self, src: Vec<&Author>, dst: Vec<&Author>) -> bool {
-      let mut ret = true;
-      for i in 0..src.len() {
-          for j in 0..dst.len() {
-              ret &= self.drop_message_for(src[i], *dst[j]);
-              ret &= self.drop_message_for(dst[i], *src[j]);
-          }
-      }
-      ret
-  }
+        let mut ret = true;
+        for i in 0..src.len() {
+            for j in 0..dst.len() {
+                ret &= self.drop_message_for(src[i], *dst[j]);
+                ret &= self.drop_message_for(dst[i], *src[j]);
+            }
+        }
+        ret
+    }
 
-  pub fn stop_split_network(&mut self, src: Vec<&Author>, dst: Vec<&Author>) -> bool {
-      let mut ret = true;
-      for i in 0..src.len() {
-          for j in 0..dst.len() {
-              ret &= self.stop_drop_message_for(src[i], dst[j]);
-              ret &= self.stop_drop_message_for(dst[i], src[j]);
-          }
-      }
-      ret
-  }
+    pub fn stop_split_network(&mut self, src: Vec<&Author>, dst: Vec<&Author>) -> bool {
+        let mut ret = true;
+        for i in 0..src.len() {
+            for j in 0..dst.len() {
+                ret &= self.stop_drop_message_for(src[i], dst[j]);
+                ret &= self.stop_drop_message_for(dst[i], src[j]);
+            }
+        }
+        ret
+    }
 }
 
 struct DropConfig(HashMap<Author, HashSet<Author>>);
 
 impl DropConfig {
+<<<<<<< HEAD
     pub fn is_message_dropped(&self, src: &Author, net_req: &PeerManagerRequest) -> bool {
+=======
+    pub fn is_message_dropped(&self, src: &Author, net_req: &NetworkRequest) -> bool {
+        //pub fn is_message_dropped(&self, src: &Author, dst: &Author) -> bool {
+>>>>>>> 66928da8... Minor fix & run cargo fmt
         match net_req {
             PeerManagerRequest::SendMessage(dst, _) => self.0.get(src).unwrap().contains(&dst),
             PeerManagerRequest::SendRpc(dst, _) => self.0.get(src).unwrap().contains(&dst),
@@ -467,11 +477,10 @@ impl DropConfig {
 struct DropConfigRound(HashMap<u64, DropConfig>);
 
 impl DropConfigRound {
-
     pub fn is_message_dropped(&self, src: Author, dst: Author, round: u64) -> bool {
         let mut result = false;
 
-        if(self.0.contains_key(&round)) {
+        if (self.0.contains_key(&round)) {
             let drop_config = self.0.get(&round).unwrap();
 
             if (drop_config.0.contains_key(&src)) {
@@ -487,16 +496,22 @@ impl DropConfigRound {
             self.0.insert(round, drop_config);
         }
 
-        if(!self.0.get_mut(&round).unwrap().0.contains_key(&src)) {
+        if (!self.0.get_mut(&round).unwrap().0.contains_key(&src)) {
             self.0.get_mut(&round).unwrap().add_node(src);
         }
 
-        let result = self.0.get_mut(&round).unwrap().0.get_mut(&src).unwrap().insert(dst);
+        let result = self
+            .0
+            .get_mut(&round)
+            .unwrap()
+            .0
+            .get_mut(&src)
+            .unwrap()
+            .insert(dst);
 
         // self.print();
 
         result
-
     }
 
     fn print(&mut self) {
@@ -511,7 +526,6 @@ impl DropConfigRound {
         }
     }
 
-
     /*
     pub fn stop_drop_message_for(&mut self, src: &Author, dst: &Author, round: u64) -> bool {
         self.0.get_mut(src).unwrap().remove(dst)
@@ -521,7 +535,6 @@ impl DropConfigRound {
         self.0.insert(src, HashSet::new());
     }
     */
-
 }
 
 
@@ -533,9 +546,8 @@ use libra_crypto::HashValue;
 #[cfg(test)]
 use libra_types::crypto_proxies::random_validator_verifier;
 
-// Bano: Check if these imports are needed
-use std::convert::{TryFrom, TryInto};
 use libra_types::validator_verifier::ValidatorVerifier;
+use std::convert::{TryFrom, TryInto};
 
 #[test]
 fn test_network_api() {
@@ -544,7 +556,6 @@ fn test_network_api() {
     let mut receivers: Vec<NetworkReceivers<TestPayload>> = Vec::new();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let mut nodes = Vec::new();
-
 
     let (signers, validator_verifier) = random_validator_verifier(num_nodes, None, false);
     let peers: Vec<_> = signers.iter().map(|signer| signer.author()).collect();
@@ -609,7 +620,6 @@ fn test_network_api() {
         }
     });
 }
-
 
 #[test]
 fn test_rpc() {

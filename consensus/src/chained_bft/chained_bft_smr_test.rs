@@ -16,6 +16,7 @@ use crate::{
     },
     consensus_provider::ConsensusProvider,
 };
+
 use channel::{self, libra_channel, message_queues::QueueStyle};
 use consensus_types::vote_msg::VoteMsg;
 use futures::{channel::mpsc, executor::block_on, stream::StreamExt};
@@ -24,6 +25,25 @@ use libra_config::{
         ConsensusConfig,
         ConsensusProposerType::{self, FixedProposer, MultipleOrderedProposers, RotatingProposer},
         NodeConfig, SafetyRulesConfig,
+
+// Bano: Check the imports below
+use channel;
+use consensus_types::{
+    proposal_msg::{ProposalMsg, ProposalUncheckedSignatures},
+    vote_msg::VoteMsg,
+};
+use futures::{channel::mpsc, executor::block_on, prelude::*};
+use libra_config::config::{
+    ConsensusProposerType::{self, FixedProposer, MultipleOrderedProposers, RotatingProposer},
+    {SafetyRulesBackend, SafetyRulesConfig},
+};
+use libra_crypto::hash::CryptoHash;
+use libra_types::account_address::AccountAddress;
+use libra_types::{
+    crypto_proxies::{
+        random_validator_verifier, LedgerInfoWithSignatures, ValidatorSigner, ValidatorVerifier,
+// end
+
     },
     generator::{self, ValidatorSwarm},
 };
@@ -39,12 +59,11 @@ use safety_rules::OnDiskStorage;
 use std::{convert::TryFrom, path::PathBuf, sync::Arc, time::Duration};
 use tempfile::NamedTempFile;
 use tokio::runtime;
-use libra_types::account_address::AccountAddress;
 
 use consensus_types::common::Round;
-use std::collections::HashMap;
 use libra_config::config::ConsensusProposerType::RoundProposers;
 use libra_logger::prelude::*;
+use std::collections::HashMap;
 
 /// Auxiliary struct that is preparing SMR for the test
 struct SMRNode {
@@ -181,7 +200,6 @@ impl SMRNode {
         proposer_type: ConsensusProposerType,
         executor_with_reconfig: bool,
     ) -> (Vec<Self>, HashMap<usize, usize>) {
-
         let (mut signers, mut validator_verifier) =
             random_validator_verifier(num_nodes, Some(quorum_voting_power), true);
 
@@ -194,7 +212,10 @@ impl SMRNode {
         for (each, target) in target_nodes.iter().enumerate() {
             let twin_index = num_nodes + each;
             node_to_twin.insert(*target, twin_index);
-            debug!("[Twins] Will create Twin for node {0} at index {1}", *target, twin_index);
+            debug!(
+                "[Twins] Will create Twin for node {0} at index {1}",
+                *target, twin_index
+            );
         }
 
         // Vector of twins
@@ -207,14 +228,13 @@ impl SMRNode {
 
         // Add twins to 'signers' and 'validator verifier'
         for ref_target_node in target_nodes {
-
             let target_node = *ref_target_node;
 
             // Clone the target node and add to vector of twins
             twins.push(signers[target_node].clone());
 
             // Index of the newly added twin
-            let twins_top = twins.len()-1;
+            let twins_top = twins.len() - 1;
 
             // The twin should be equal to the target node, at this point
             assert_eq!(twins[twins_top], signers[target_node]);
@@ -264,7 +284,7 @@ impl SMRNode {
                 &mut validator_verifier,
                 twin_account_address.clone(),
                 &target_account_address,
-                quorum_voting_power.clone()
+                quorum_voting_power.clone(),
             );
         }
 
@@ -290,34 +310,34 @@ impl SMRNode {
 
         twins_round_proposers.insert(
             1,
-            vec![signers[0].author(),
-                 signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
-            ]
+            vec![
+                signers[0].author(),
+                signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
+            ],
         );
         twins_round_proposers.insert(
             2,
-            vec![signers[0].author(),
-                 signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
-            ]
+            vec![
+                signers[0].author(),
+                signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
+            ],
         );
         twins_round_proposers.insert(
             3,
-            vec![signers[0].author(),
-                 signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
-            ]
+            vec![
+                signers[0].author(),
+                signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
+            ],
         );
         twins_round_proposers.insert(
             4,
-            vec![signers[0].author(),
-                 signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
-            ]
+            vec![
+                signers[0].author(),
+                signers[node_to_twin.get(&0).unwrap().to_owned()].author(),
+            ],
         );
 
-        ValidatorVerifier::set_round_to_validators(
-            &mut validator_verifier,
-            twins_round_proposers,
-        );
-
+        ValidatorVerifier::set_round_to_validators(&mut validator_verifier, twins_round_proposers);
 
         let validator_set = if executor_with_reconfig {
             Some((&validator_verifier).into())
@@ -350,14 +370,36 @@ impl SMRNode {
             ));
         }
 
-        (
-        nodes,
-        node_to_twin,
-        )
+        // Adding twins
+        let count_twins = twins.len();
+
+        for each in 0..count_twins {
+            let (storage, initial_data) = MockStorage::start_for_testing();
+            let safety_rules_path = NamedTempFile::new().unwrap().into_temp_path().to_path_buf();
+            OnDiskStorage::default_storage(safety_rules_path.clone());
+            nodes.push(Self::start(
+                playground,
+                // We always remove at 0 because removing results in the
+                // element being removed, and all the other elements being
+                // moved to the 'left' (hence what used to be the element
+                // at index 1 will come to index 0, after the original
+                // element at index 0 is removed). So eventually on removing
+                // the last element we're left with an empty vector.
+                twins.remove(0),
+                Arc::clone(&validators),
+                num_nodes + each,
+                storage,
+                initial_data,
+                proposer_type,
+                validator_set.clone(),
+                safety_rules_path,
+            ));
+        }
+
+        (nodes, node_to_twin)
+>>>>>>> 66928da8... Minor fix & run cargo fmt
     }
 }
-
-
 
 fn verify_finality_proof(node: &SMRNode, ledger_info_with_sig: &LedgerInfoWithSignatures) {
     let validators = ValidatorVerifier::from(&node.storage.shared_storage.validator_set);
@@ -440,34 +482,34 @@ fn start_with_proposal_test() {
     });
 }
 
-
 #[test]
 /// Upon startup, the first proposal is sent, delivered and voted by all the nodes and twins.
 fn twins_start_with_proposal_test() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.executor());
 
-
     // Index #s of nodes (i.e. target nodes) for which we will create twins
-    let mut target_nodes= vec![];
+    let mut target_nodes = vec![];
     target_nodes.push(0);
     target_nodes.push(1);
 
-    let (nodes, node_to_twin) =
-        SMRNode::start_num_nodes_with_twins(
-            2,
-            &mut target_nodes,
-            2,
-            &mut playground,
-            RoundProposers,
-            false);
-
+    let (nodes, node_to_twin) = SMRNode::start_num_nodes_with_twins(
+        2,
+        &mut target_nodes,
+        2,
+        &mut playground,
+        RoundProposers,
+        false,
+    );
 
     let n0 = nodes[0].signer.author();
     let n1 = nodes[1].signer.author();
-    let twin0 = nodes[node_to_twin.get(&0).unwrap().to_owned()].signer.author();
-    let twin1 = nodes[node_to_twin.get(&1).unwrap().to_owned()].signer.author();
-
+    let twin0 = nodes[node_to_twin.get(&0).unwrap().to_owned()]
+        .signer
+        .author();
+    let twin1 = nodes[node_to_twin.get(&1).unwrap().to_owned()]
+        .signer
+        .author();
 
     //playground.drop_message_for_round(n1,  n0, 1);
     //playground.drop_message_for_round(twin1,  n0, 1);
@@ -486,13 +528,16 @@ fn twins_start_with_proposal_test() {
             .collect();
         let proposed_block_id = votes[0].vote().vote_data().proposed().id();
 
-        println!("*********** The ID of HQC is ***********: {0}",nodes[0]
-            .smr
-            .block_store()
-            .unwrap()
-            .highest_quorum_cert()
-            .certified_block()
-            .id());
+        println!(
+            "*********** The ID of HQC is ***********: {0}",
+            nodes[0]
+                .smr
+                .block_store()
+                .unwrap()
+                .highest_quorum_cert()
+                .certified_block()
+                .id()
+        );
 
         /*
         let _proposals = playground
@@ -514,7 +559,7 @@ fn twins_start_with_proposal_test() {
             .unwrap()
             .get_block(proposed_block_id)
             .is_some());
-       assert!(nodes[2]
+        assert!(nodes[2]
             .smr
             .block_store()
             .unwrap()
@@ -526,10 +571,8 @@ fn twins_start_with_proposal_test() {
             .unwrap()
             .get_block(proposed_block_id)
             .is_some());
-
     });
 }
-
 
 
 #[test]
@@ -540,36 +583,36 @@ fn twins_drop_config_round_test() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.executor());
 
-
     // Index #s of nodes (i.e. target nodes) for which we will create twins
-    let mut target_nodes= vec![];
+    let mut target_nodes = vec![];
     target_nodes.push(0);
     target_nodes.push(1);
 
-    let (nodes, node_to_twin) =
-        SMRNode::start_num_nodes_with_twins(
-            2,
-            &mut target_nodes,
-            2,
-            &mut playground,
-            RoundProposers,
-            false);
-
+    let (nodes, node_to_twin) = SMRNode::start_num_nodes_with_twins(
+        2,
+        &mut target_nodes,
+        2,
+        &mut playground,
+        RoundProposers,
+        false,
+    );
 
     let n0 = nodes[0].signer.author();
     let n1 = nodes[1].signer.author();
-    let twin0 = nodes[node_to_twin.get(&0).unwrap().to_owned()].signer.author();
-    let twin1 = nodes[node_to_twin.get(&1).unwrap().to_owned()].signer.author();
-
+    let twin0 = nodes[node_to_twin.get(&0).unwrap().to_owned()]
+        .signer
+        .author();
+    let twin1 = nodes[node_to_twin.get(&1).unwrap().to_owned()]
+        .signer
+        .author();
 
     // Filters
 
-    playground.drop_message_for_round(n0,  n1, 1);
-    playground.drop_message_for_round(n0,  n1, 3);
-    playground.drop_message_for_round(n0,  twin0, 3);
+    playground.drop_message_for_round(n0, n1, 1);
+    playground.drop_message_for_round(n0, n1, 3);
+    playground.drop_message_for_round(n0, twin0, 3);
 
     block_on(async move {
-
         // ===== Round 1 ======
 
         let _proposals = playground
@@ -611,7 +654,6 @@ fn twins_drop_config_round_test() {
             .unwrap()
             .get_block(proposed_block_id)
             .is_some());
-
 
         // ========= Round 2 =========
         let _proposals = playground
@@ -697,8 +739,6 @@ fn twins_drop_config_round_test() {
             .unwrap()
             .get_block(proposed_block_id)
             .is_some());
-
-
     });
 }
 
@@ -711,57 +751,40 @@ fn twins_drop_config_round_test() {
 /// The purpose of this test is to create a safety violation;
 /// n2 commits the block proposed by node 0, and node 3 commits
 /// the block proposed by twin 0.
+///
+/// run the test:
+/// cargo xtest -p consensus twins_test_simple_safety_attack -- --nocapture
 fn twins_test_simple_safety_attack() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.executor());
 
     // Index #s of nodes (i.e. target nodes) for which we will create twins
-    let mut target_nodes= vec![];
+    let mut target_nodes = vec![];
     target_nodes.push(0);
     target_nodes.push(1);
 
-    let (nodes, node_to_twin) =
-        SMRNode::start_num_nodes_with_twins(
-            /* num_nodes */ 4,
-            &mut target_nodes,
-            /* quorum_voting_power */ 3,
-            &mut playground,
-            RoundProposers, //FixedProposer,
-            /* executor_with_reconfig */ false);
+    let (nodes, node_to_twin) = SMRNode::start_num_nodes_with_twins(
+        /* num_nodes */ 4,
+        &mut target_nodes,
+        /* quorum_voting_power */ 3,
+        &mut playground,
+        RoundProposers, //FixedProposer,
+        /* executor_with_reconfig */ false,
+    );
 
     let n0 = nodes[0].signer.author();
     let n1 = nodes[1].signer.author();
-    let twin0 = nodes[node_to_twin.get(&0).unwrap().to_owned()].signer.author();
-    let twin1 = nodes[node_to_twin.get(&1).unwrap().to_owned()].signer.author();
+    let twin0 = nodes[node_to_twin.get(&0).unwrap().to_owned()]
+        .signer
+        .author();
+    let twin1 = nodes[node_to_twin.get(&1).unwrap().to_owned()]
+        .signer
+        .author();
     let n2 = nodes[2].signer.author();
     let n3 = nodes[3].signer.author();
 
     // `Create static netwok partitions`
     playground.split_network(vec![&n0, &n1, &n2], vec![&twin0, &twin1, &n3]);
-    /*
-    for round in 1..10 {
-        playground.drop_message_for_round(n0,  twin0, round);
-        playground.drop_message_for_round(twin0,  n0, round);
-        playground.drop_message_for_round(n0,  twin1, round);
-        playground.drop_message_for_round(twin1,  n0, round);
-        playground.drop_message_for_round(n0,  n3, round);
-        playground.drop_message_for_round(n3,  n0, round);
-
-        playground.drop_message_for_round(n1,  twin0, round);
-        playground.drop_message_for_round(twin0,  n1, round);
-        playground.drop_message_for_round(n1,  twin1, round);
-        playground.drop_message_for_round(twin1,  n1, round);
-        playground.drop_message_for_round(n1,  n3, round);
-        playground.drop_message_for_round(n3,  n1, round);
-
-        playground.drop_message_for_round(n2,  twin0, round);
-        playground.drop_message_for_round(twin0,  n2, round);
-        playground.drop_message_for_round(n2,  twin1, round);
-        playground.drop_message_for_round(twin1,  n2, round);
-        playground.drop_message_for_round(n2,  n3, round);
-        playground.drop_message_for_round(n3,  n2, round);
-    }
-    */
 
     block_on(async move {
         let _proposals = playground
@@ -792,7 +815,7 @@ fn twins_test_simple_safety_attack() {
             .unwrap()
             .get_block(proposed_block_id)
             .is_some());
-       assert!(nodes[2]
+        assert!(nodes[2]
             .smr
             .block_store()
             .unwrap()
@@ -800,12 +823,12 @@ fn twins_test_simple_safety_attack() {
             .is_some());
 
         // Check that all nodes of partition 1 have the same QC.
-        let commit_id_parition_1 = nodes[0]
+        let commit_info_parition_1 = nodes[0]
             .smr
             .block_store()
             .unwrap()
             .highest_quorum_cert()
-            .certified_block()
+            .commit_info()
             .id();
         assert_eq!(
             nodes[1]
@@ -813,9 +836,9 @@ fn twins_test_simple_safety_attack() {
                 .block_store()
                 .unwrap()
                 .highest_quorum_cert()
-                .certified_block()
+                .commit_info()
                 .id(),
-            commit_id_parition_1
+            commit_info_parition_1
         );
         assert_eq!(
             nodes[2]
@@ -823,18 +846,18 @@ fn twins_test_simple_safety_attack() {
                 .block_store()
                 .unwrap()
                 .highest_quorum_cert()
-                .certified_block()
+                .commit_info()
                 .id(),
-            commit_id_parition_1
+            commit_info_parition_1
         );
 
         // Check that all nodes in partition 2 have the same QC
-        let commit_id_parition_2 = nodes[3]
+        let commit_info_parition_2 = nodes[3]
             .smr
             .block_store()
             .unwrap()
             .highest_quorum_cert()
-            .certified_block()
+            .commit_info()
             .id();
         assert_eq!(
             nodes[4] // twin 0
@@ -842,9 +865,9 @@ fn twins_test_simple_safety_attack() {
                 .block_store()
                 .unwrap()
                 .highest_quorum_cert()
-                .certified_block()
+                .commit_info()
                 .id(),
-            commit_id_parition_2
+            commit_info_parition_2
         );
         assert_eq!(
             nodes[5] // twin 1
@@ -852,13 +875,13 @@ fn twins_test_simple_safety_attack() {
                 .block_store()
                 .unwrap()
                 .highest_quorum_cert()
-                .certified_block()
+                .commit_info()
                 .id(),
-            commit_id_parition_2
+            commit_info_parition_2
         );
 
         // Show that the QC of the nodes in parition 1 and partition 2 are different
-        assert_ne!(commit_id_parition_1, commit_id_parition_2);
+        assert_ne!(commit_info_parition_1, commit_info_parition_2);
 
         // Show that the QC of all nades are on the same round
         let commit_round_partition_1 = nodes[0]
@@ -866,15 +889,106 @@ fn twins_test_simple_safety_attack() {
             .block_store()
             .unwrap()
             .highest_quorum_cert()
-            .certified_block().round();
+            .certified_block()
+            .round();
         let commit_round_partition_2 = nodes[3]
             .smr
             .block_store()
             .unwrap()
             .highest_quorum_cert()
-            .certified_block().round();
+            .certified_block()
+            .round();
         assert_eq!(commit_round_partition_1, commit_round_partition_2);
     });
+}
+
+fn create_partitions(
+    playground: &mut NetworkPlayground,
+    partitions: HashMap<usize,Vec<Vec<usize>>>
+) {
+    for round in partitions.keys() {
+        // TODO: create partitions
+        // playground.drop_message_for_round(n0, twin0, round);
+        println!("{}", round);
+        /*
+        assert!(partitions.get(&round).is_some());
+        sets = partitions.get(&round).unwrap();
+        for (i, set) in sets.iter().enumerate() {
+
+            let concatenated = [&first[..], &second[..]].concat();
+
+            for j in 0..set.len() {
+                playground.drop_message_for_round(set[j], twin0, round);
+            }
+        }
+        */
+    }
+}
+
+fn is_safety_attack() -> bool {
+    // TODO: asserts go here
+    false
+}
+
+fn run_experiment(
+    num_nodes: usize,
+    partitions: HashMap<usize,Vec<Vec<usize>>>
+) {
+    let runtime = consensus_runtime();
+    let mut playground = NetworkPlayground::new(runtime.executor());
+
+    // TODO: allow any number of nodes
+    assert_eq!(num_nodes, 4);
+    // Index #s of nodes (i.e. target nodes) for which we will create twins
+    let mut target_nodes = vec![];
+    target_nodes.push(0);
+    target_nodes.push(1);
+    let (nodes, node_to_twin) = SMRNode::start_num_nodes_with_twins(
+        /* num_nodes */ 4,
+        &mut target_nodes,
+        /* quorum_voting_power */ 3,
+        &mut playground,
+        RoundProposers,
+        /* executor_with_reconfig */ false,
+    );
+
+    // Create partitions.
+    create_partitions(&mut playground, partitions);
+
+    // TODO: allow to run more rounds
+    block_on(async move {
+        let _proposals = playground
+            .wait_for_messages(1, NetworkPlayground::proposals_only)
+            .await;
+
+        // Pull enough votes to get a commit on the first block)
+        // The proposer's votes are implicit and do not go in the queue.
+        let votes: Vec<VoteMsg> = playground
+            .wait_for_messages(13, NetworkPlayground::votes_only)
+            .await
+            .into_iter()
+            .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
+            .collect();
+        let proposed_block_id = votes[0].vote().vote_data().proposed().id();
+
+        // Check for safety violations
+        assert!(!is_safety_attack());
+    });
+}
+
+#[test]
+// run:
+// cargo xtest -p consensus twins_test_safety_attack_generator -- --nocapture
+fn twins_test_safety_attack_generator() {
+    let mut partitions: HashMap<usize,Vec<Vec<usize>>> = HashMap::new();
+    for round in 0..5 {
+        partitions.insert(
+            /* round */ round,
+            vec![vec![0, 1, 2], vec![3, 4, 5]]
+        );
+    }
+
+    run_experiment(4, partitions);
 }
 
 #[test]
@@ -885,7 +999,6 @@ fn twinsless_partition_start_stop_test() {
     let nodes = SMRNode::start_num_nodes(2, 2, &mut playground, FixedProposer, false);
 
     block_on(async move {
-
         let n0 = &nodes[0].signer.author();
         let n1 = &nodes[1].signer.author();
 
@@ -929,7 +1042,6 @@ fn twinsless_block_proposal_test() {
     let nodes = SMRNode::start_num_nodes(2, 2, &mut playground, FixedProposer, false);
 
     block_on(async move {
-
         let n0 = &nodes[0].signer.author();
         let n1 = &nodes[1].signer.author();
         playground.split_network(vec![n0], vec![n1]);
@@ -963,7 +1075,6 @@ fn twinsless_block_proposal_test() {
             .unwrap()
             .get_block(proposed_block_id)
             .is_some());
-
     });
 }
 
@@ -975,7 +1086,6 @@ fn twinsless_block_vote_test() {
     let nodes = SMRNode::start_num_nodes(2, 2, &mut playground, FixedProposer, false);
 
     block_on(async move {
-
         let n0 = &nodes[0].signer.author();
         let n1 = &nodes[1].signer.author();
 
@@ -1021,7 +1131,6 @@ fn twins_test() {
     let nodes = SMRNode::start_num_nodes(2, 2, &mut playground, FixedProposer, false);
 
     block_on(async move {
-
         let n0 = &nodes[0].signer.author();
         let n1 = &nodes[1].signer.author();
         let twin0 = &nodes[2].signer.author();
@@ -1070,7 +1179,6 @@ fn twins_test() {
             .unwrap()
             .get_block(proposed_block_id)
             .is_some());
-
     });
 }
 
@@ -1082,7 +1190,6 @@ fn twins_block_proposal_test() {
     let nodes = SMRNode::start_num_nodes(2, 2, &mut playground, FixedProposer, false);
 
     block_on(async move {
-
         let n0 = &nodes[0].signer.author();
         let n1 = &nodes[1].signer.author();
         let twin0 = &nodes[2].signer.author();
@@ -1118,10 +1225,8 @@ fn twins_block_proposal_test() {
             .unwrap()
             .get_block(proposed_block_id)
             .is_none());
-
     });
 }
-
 
 fn basic_full_round(
     num_nodes: usize,

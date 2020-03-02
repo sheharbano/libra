@@ -16,4 +16,3 @@ mod pacemaker_test;
 mod rotating_proposer_test;
 #[cfg(test)]
 mod round_proposers_test;
-
