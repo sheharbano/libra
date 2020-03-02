@@ -60,10 +60,14 @@ use std::{convert::TryFrom, path::PathBuf, sync::Arc, time::Duration};
 use tempfile::NamedTempFile;
 use tokio::runtime;
 
-use consensus_types::common::Round;
 use libra_config::config::ConsensusProposerType::RoundProposers;
 use libra_logger::prelude::*;
 use std::collections::HashMap;
+use libra_crypto::hash::HashValue;
+
+use consensus_types::{
+    common::Round, executed_block::ExecutedBlock
+};
 
 /// Auxiliary struct that is preparing SMR for the test
 struct SMRNode {
@@ -307,6 +311,7 @@ impl SMRNode {
             vec![signers[0].author()]
              );
         */
+
 
         twins_round_proposers.insert(
             1,
@@ -794,13 +799,14 @@ fn twins_test_simple_safety_attack() {
         // Pull enough votes to get a commit on the first block)
         // The proposer's votes are implicit and do not go in the queue.
         let votes: Vec<VoteMsg> = playground
-            .wait_for_messages(13, NetworkPlayground::votes_only)
+            .wait_for_messages(23, NetworkPlayground::votes_only)
             .await
             .into_iter()
             .map(|(_, msg)| VoteMsg::try_from(msg).unwrap())
             .collect();
         let proposed_block_id = votes[0].vote().vote_data().proposed().id();
 
+        /*
         // Verify that the proposed block id is indeed present in the
         // block store of replicas and their twins.
         assert!(nodes[0]
@@ -899,6 +905,139 @@ fn twins_test_simple_safety_attack() {
             .certified_block()
             .round();
         assert_eq!(commit_round_partition_1, commit_round_partition_2);
+        */
+
+        let mut all_branches: Vec<Vec<Arc<ExecutedBlock<TestPayload>>>> = Vec::new();
+
+        // =================
+        // Branch for node 0
+        // =================
+
+        let branch_head0 = nodes[0]
+            .smr
+            .block_store()
+            .unwrap()
+            .highest_ledger_info()
+            .commit_info()
+            .id();
+
+        let branch0: Vec<Arc<ExecutedBlock<TestPayload>>> = nodes[0]
+            .smr
+            .block_store()
+            .unwrap()
+            .path_from_root(branch_head0)
+            .unwrap_or_else(Vec::new);
+
+        all_branches.push(branch0);
+
+        // =================
+        // Branch for node 1
+        // =================
+
+        let branch_head1 = nodes[1]
+            .smr
+            .block_store()
+            .unwrap()
+            .highest_ledger_info()
+            .commit_info()
+            .id();
+
+        let branch1: Vec<Arc<ExecutedBlock<TestPayload>>> = nodes[1]
+            .smr
+            .block_store()
+            .unwrap()
+            .path_from_root(branch_head1)
+            .unwrap_or_else(Vec::new);
+
+        all_branches.push(branch1);
+
+        // =================
+        // Branch for node 2
+        // =================
+
+        let branch_head2 = nodes[2]
+            .smr
+            .block_store()
+            .unwrap()
+            .highest_ledger_info()
+            .commit_info()
+            .id();
+
+        let branch2: Vec<Arc<ExecutedBlock<TestPayload>>> = nodes[2]
+            .smr
+            .block_store()
+            .unwrap()
+            .path_from_root(branch_head2)
+            .unwrap_or_else(Vec::new);
+
+        all_branches.push(branch2);
+
+
+        // =================
+        // Branch for node 3
+        // =================
+
+        let branch_head3 = nodes[3]
+            .smr
+            .block_store()
+            .unwrap()
+            .highest_ledger_info()
+            .commit_info()
+            .id();
+
+        let branch3: Vec<Arc<ExecutedBlock<TestPayload>>> = nodes[3]
+            .smr
+            .block_store()
+            .unwrap()
+            .path_from_root(branch_head3)
+            .unwrap_or_else(Vec::new);
+
+        all_branches.push(branch3);
+
+        // =================
+        // Branch for node 4
+        // =================
+
+        let branch_head4 = nodes[4]
+            .smr
+            .block_store()
+            .unwrap()
+            .highest_ledger_info()
+            .commit_info()
+            .id();
+
+        let branch4: Vec<Arc<ExecutedBlock<TestPayload>>> = nodes[4]
+            .smr
+            .block_store()
+            .unwrap()
+            .path_from_root(branch_head4)
+            .unwrap_or_else(Vec::new);
+
+        all_branches.push(branch4);
+
+        // =================
+        // Branch for node 5
+        // =================
+
+        let branch_head5 = nodes[5]
+            .smr
+            .block_store()
+            .unwrap()
+            .highest_ledger_info()
+            .commit_info()
+            .id();
+
+        let branch5: Vec<Arc<ExecutedBlock<TestPayload>>> = nodes[5]
+            .smr
+            .block_store()
+            .unwrap()
+            .path_from_root(branch_head5)
+            .unwrap_or_else(Vec::new);
+
+        all_branches.push(branch5);
+
+
+        assert!(!is_safe(all_branches));
     });
 }
 
@@ -912,10 +1051,100 @@ fn create_partitions(
     }
 }
 
-fn is_safety_attack() -> bool {
-    // TODO: asserts go here
-    false
+// Compares branches at each height to check if there's any conflict
+fn is_safe(branches: Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>) -> bool {
+    compare_vectors(&branches)
 }
+
+fn compare_vectors(vecs: &Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>) -> bool {
+
+    // how many vectors need to be compared
+    let num_vecs = vecs.len();
+
+    println!("Comparing {0} vectors", num_vecs);
+    for (each, item) in vecs.iter().enumerate() {
+        println!("====== Vector {0} =======", each);
+        for (x, y) in item.iter().enumerate() {
+            print!("Index{0}:{1}\t",x, y.id());
+        }
+        print!("\n");
+    }
+
+    let (longest_idx,longest_len)=longest_vector(vecs);
+    //println!("Longest vector is at idx {0} with len {1}: {2:?}", longest_idx, longest_len, vecs[longest_idx]);
+
+    let mut is_conflict = false;
+
+    // At each index position
+    for i in 0..longest_len {
+        let mut val: HashValue = HashValue::zero();
+
+        let mut first_time = true;
+
+        // in the vectors to be compared
+        for vec in vecs.iter() {
+            // Only compare if the index being compared exists
+            // (because some vectors might be shorter than the longest)
+            if i < vec.len() {
+                // If this is the first time comparing
+                if first_time  {
+                    val = vec[i].id();
+                    first_time = false;
+                }
+                // If there's a different val at this index than the one
+                // at the previous vector
+                if !val.eq(&vec[i].id()) {
+                    // then print the conflicting index at all vectors,
+                    print_conflict(vecs, i);
+                    is_conflict = true;
+                    // and move on to the next index
+                    break;
+                }
+            }
+        }
+    }
+    is_conflict
+}
+
+
+fn print_conflict(vecs: &Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>, index: usize) {
+
+    println!("CONFLICT: Index {0} doesn't match, values are:", index);
+
+    for vec in vecs.iter() {
+        if index < vec.len() {
+            println!("{0}", vec[index].id());
+        }
+        else {
+            println!("NULL");
+        }
+    }
+}
+
+
+// This function takes a vector of vectors, and returns
+// (1) the longest one, if the vectors are all of different lengths, OR
+// (2) the first longest one, if multiple vectors are of that length
+fn longest_vector(vecs: &Vec<Vec<Arc<ExecutedBlock<TestPayload>>>>) -> (usize, usize) {
+
+    let mut max_len: usize = 0;
+    let mut idx: usize = 0;
+
+    for (i, vec) in vecs.iter().enumerate() {
+        let vec_len = vec.len();
+
+        if vec_len > max_len {
+            max_len = vec_len;
+            idx = i;
+        }
+    }
+
+    (idx,max_len)
+}
+
+
+
+
 
 fn run_experiment(
     num_nodes: usize,
@@ -959,7 +1188,7 @@ fn run_experiment(
         let proposed_block_id = votes[0].vote().vote_data().proposed().id();
 
         // Check for safety violations
-        assert!(!is_safety_attack());
+        //assert!(!is_safe());
     });
 }
 
