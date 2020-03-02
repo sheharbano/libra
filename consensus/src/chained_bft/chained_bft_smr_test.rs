@@ -1626,7 +1626,7 @@ fn twins_test_safety_attack_generator() {
     // calculate "permutations with replacement". We decided not to do that
     // for now to limit the number of test cases
     //
-    assert!(partition_scenarios_with_leaders.len() > NUM_OF_ROUNDS);
+    assert!(partition_scenarios_with_leaders.len() >= NUM_OF_ROUNDS);
 
     let test_cases = partition_scenarios_with_leaders
         .iter()
