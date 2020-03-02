@@ -1,7 +1,6 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-// Bano
 
 use crate::chained_bft::block_storage::VoteReceptionResult;
 use consensus_types::{
@@ -139,7 +138,6 @@ impl PendingVotes {
         }
     }
 
-    // Bano
     /// If this is the first vote from Author, add it to map. If Author has
     /// already voted on same block then return DuplicateVote error. If Author has already voted
     /// on some other result, prune the last vote and insert new one in map.

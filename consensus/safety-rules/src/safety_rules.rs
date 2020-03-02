@@ -54,6 +54,41 @@ impl<T: Payload> SafetyRules<T> {
         }
     }
 
+<<<<<<< HEAD
+=======
+    pub fn signer(&self) -> &ValidatorSigner {
+        &self.validator_signer
+    }
+
+    /// Learn about a new quorum certificate. In normal state, this updates the preferred round,
+    /// if the parent is greater than our current preferred round.
+    /// @TODO verify signatures of the QC, also the special genesis QC
+    /// @TODO improving signaling by stating reaction to passed in QC:
+    ///     QC has older preferred round,
+    ///     signatures are incorrect,
+    ///     epoch is unexpected
+    ///     updating to new preferred round
+    /// @TODO update epoch with validator set
+    /// @TODO if public key does not match private key in validator set, access persistent storage
+    /// to identify new key
+    pub fn update(&mut self, qc: &QuorumCert) {
+        if qc.parent_block().round() > self.persistent_storage.preferred_round() {
+            self.persistent_storage
+                .set_preferred_round(qc.parent_block().round());
+        }
+    }
+
+    /// Notify the safety rules about the new epoch start.
+    pub fn start_new_epoch(&mut self, qc: &QuorumCert) {
+        if qc.commit_info().epoch() > self.persistent_storage.epoch() {
+            self.persistent_storage.set_epoch(qc.commit_info().epoch());
+            self.persistent_storage.set_last_voted_round(0);
+            self.persistent_storage.set_preferred_round(0);
+        }
+        self.update(qc);
+    }
+
+>>>>>>> 71f96056... Removed 'Bano' references from comments
     /// Produces a LedgerInfo that either commits a block based upon the 3-chain commit rule
     /// or an empty LedgerInfo for no commit. The 3-chain commit rule is: B0 (as well as its
     /// prefix) can be committed if there exist certified blocks B1 and B2 that satisfy:
@@ -118,11 +153,13 @@ impl<T: Payload> TSafetyRules<T> for SafetyRules<T> {
         Ok(())
     }
 
+    /// Attempts to vote for a given proposal following the voting rules.
     /// @TODO verify signature on vote proposal
     /// @TODO verify QC correctness
     /// @TODO verify epoch on vote proposal
     fn construct_and_sign_vote(&mut self, vote_proposal: &VoteProposal<T>) -> Result<Vote, Error> {
         let proposed_block = vote_proposal.block();
+
 
         if proposed_block.round() <= self.persistent_storage.last_voted_round()? {
             return Err(Error::OldProposal {
