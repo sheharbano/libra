@@ -1975,9 +1975,14 @@ fn execute_scenario(
     //assert_eq!(partitions.len(), leaders.len());
     //let num_of_rounds = partitions.len().clone();
 
+    println!("\n>>>>> Executing scenario\n");
+
+    println!("\n>>>>> Setting up configuration\n");
+
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
 
+    println!("Starting nodes and twins");
     let nodes = SMRNode::start_num_nodes_with_twins(
         /* num_nodes */ num_nodes,
         &target_nodes,
@@ -2017,6 +2022,9 @@ fn execute_scenario(
     create_partitions(&mut playground, round_partitions);
     // playground.print_drop_config_round();
 
+
+    println!("\n>>>>> Starting protocol execution\n");
+
     // Start sending messages
 
     block_on(async move {
@@ -2042,6 +2050,8 @@ fn execute_scenario(
     // =================
     // Check for all nodes if there are any conflicting branches in the tree of commits
     // =================
+
+    println!("\n>>>>> Getting node commit trees for safety check\n");
 
     let mut all_branches: Vec<Vec<Arc<ExecutedBlock<TestPayload>>>> = Vec::new();
 
@@ -2077,12 +2087,16 @@ fn execute_scenario(
         }
     }
 
+    println!("\n>>>>> Performing safety check\n");
+
     // Now check if the branches match at all heights
     if enable_safety_assertion {
         assert!(is_safe(all_branches));
     } else {
         is_safe(all_branches);
     }
+
+    println!("\n>>>>> Stopping nodes\n");
 
     // Stop all the nodes
     for each_node in nodes {
@@ -2093,7 +2107,11 @@ fn execute_scenario(
     // but there is no existing function to help with that. If memory usage is
     // high with repeated calls to this function, we will have to implement this
 
+    println!("Shutting down runtime");
+
     runtime.shutdown_timeout(Duration::from_millis(100));
+
+    println!("\n>>>>> Finished test!\n");
 
 }
 
