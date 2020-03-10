@@ -90,6 +90,26 @@ impl NetworkConfig {
         }
     }
 
+
+    /// This clones everything including the keypair so that this config can be used
+    /// for twins
+    pub fn clone_everything(&self) -> Self {
+        Self {
+            peer_id: self.peer_id,
+            listen_address: self.listen_address.clone(),
+            advertised_address: self.advertised_address.clone(),
+            discovery_interval_ms: self.discovery_interval_ms,
+            connectivity_check_interval_ms: self.connectivity_check_interval_ms,
+            enable_noise: self.enable_noise,
+            enable_remote_authentication: self.enable_remote_authentication,
+            network_keypairs: self.network_keypairs.clone(),
+            network_peers_file: self.network_peers_file.clone(),
+            network_peers: self.network_peers.clone(),
+            seed_peers_file: self.seed_peers_file.clone(),
+            seed_peers: self.seed_peers.clone(),
+        }
+    }
+
     pub fn load(&mut self, root_dir: &RootPath, network_role: RoleType) -> Result<()> {
         if !self.network_peers_file.as_os_str().is_empty() {
             let path = root_dir.full_path(&self.network_peers_file);

@@ -24,6 +24,23 @@ pub struct RoundProposers {
 impl RoundProposers {
     /// With only one proposer in the vector, it behaves the same as a fixed proposer strategy.
     pub fn new(proposers: Option<HashMap<Round, Vec<Author>>>, default_proposer: Author) -> Self {
+
+        /*
+        match &proposers {
+            Some(val) => {
+                println!("================");
+                println!("{:?}",val);
+                println!("================");
+            }
+            _ => {
+                println!("================");
+                println!("RoundProposers: None");
+                println!("================");
+
+            },
+        }
+        */
+
         Self {
             proposers,
             // We hardcode this to the first validator (smallest index = 0)

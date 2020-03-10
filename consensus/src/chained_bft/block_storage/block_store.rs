@@ -189,7 +189,11 @@ impl<T: Payload> BlockStore<T> {
             "round": block_to_commit.round(),
             "parent_id": block_to_commit.parent_id().short_str(),
         );
-        self.prune_tree(block_to_commit.id());
+
+        // Commenting this out because for Twins safety test we want
+        // to check the entire tree
+        // self.prune_tree(block_to_commit.id());
+
         Ok(blocks_to_commit)
     }
 
@@ -353,14 +357,12 @@ impl<T: Payload> BlockStore<T> {
             // executor.
             error!("fail to delete block: {:?}", e);
         }
-        // Commenting this out because for Twins safety test we want
-        // to check the entire tree
-        /*
+
         self.inner
             .write()
             .unwrap()
             .process_pruned_blocks(next_root_id, id_to_remove.clone());
-            */
+
         id_to_remove
     }
 }

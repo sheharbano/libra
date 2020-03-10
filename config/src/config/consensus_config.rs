@@ -5,6 +5,9 @@ use crate::config::SafetyRulesConfig;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+use std::collections::HashMap;
+use libra_types::account_address::AccountAddress;
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ConsensusConfig {
@@ -14,6 +17,9 @@ pub struct ConsensusConfig {
     pub max_pruned_blocks_in_mem: usize,
     pub pacemaker_initial_timeout_ms: u64,
     pub safety_rules: SafetyRulesConfig,
+    // round_to_proposers: Used in twins testing to specify leader(s) per round.
+    // Note: Round is u64
+    pub round_to_proposers: Option<HashMap<u64, Vec<AccountAddress>>>
 }
 
 impl Default for ConsensusConfig {
@@ -25,6 +31,7 @@ impl Default for ConsensusConfig {
             max_pruned_blocks_in_mem: 10000,
             pacemaker_initial_timeout_ms: 1000,
             safety_rules: SafetyRulesConfig::default(),
+            round_to_proposers: None::<HashMap<u64, Vec<AccountAddress>>>
         }
     }
 }
@@ -32,6 +39,14 @@ impl Default for ConsensusConfig {
 impl ConsensusConfig {
     pub fn set_data_dir(&mut self, data_dir: PathBuf) {
         self.safety_rules.set_data_dir(data_dir);
+    }
+
+    /// Sets the `round_to_proposers' field of the struct ConsensusConfig
+    pub fn set_round_to_proposers(
+        &mut self,
+        round_to_proposers_map: HashMap<u64, Vec<AccountAddress>>,
+    ) {
+        self.round_to_proposers = Some(round_to_proposers_map);
     }
 }
 

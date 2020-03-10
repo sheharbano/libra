@@ -28,28 +28,6 @@ use consensus_types::{
     epoch_retrieval::EpochRetrievalRequest,
 };
 use libra_config::config::{ConsensusConfig, ConsensusProposerType};
-
-// Bano: Need to check the imports below
-use crate::chained_bft::block_storage::{BlockReader, BlockStore};
-use crate::chained_bft::chained_bft_smr::ChainedBftSMRConfig;
-use crate::chained_bft::event_processor::EventProcessor;
-use crate::chained_bft::liveness::multi_proposer_election::MultiProposer;
-use crate::chained_bft::liveness::pacemaker::{ExponentialTimeInterval, Pacemaker};
-use crate::chained_bft::liveness::proposal_generator::ProposalGenerator;
-use crate::chained_bft::liveness::proposer_election::ProposerElection;
-use crate::chained_bft::liveness::rotating_proposer_election::{choose_leader, RotatingProposer};
-use crate::chained_bft::liveness::round_proposers_election::RoundProposers;
-use crate::chained_bft::network::NetworkSender;
-use crate::chained_bft::persistent_storage::{PersistentStorage, RecoveryData};
-use crate::counters;
-use crate::state_replication::{StateComputer, TxnManager};
-use crate::util::time_service::{ClockTimeService, TimeService};
-use consensus_types::common::{Payload, Round};
-use consensus_types::epoch_retrieval::EpochRetrievalRequest;
-use futures::executor::block_on;
-use libra_config::config::{ConsensusProposerType, SafetyRulesBackend};
-// end
-
 use libra_logger::prelude::*;
 use libra_types::{
     account_address::AccountAddress,
@@ -59,6 +37,8 @@ use libra_types::{
 use network::protocols::network::Event;
 use safety_rules::SafetyRulesManager;
 use std::{cmp::Ordering, sync::Arc, time::Duration};
+
+use crate::chained_bft::liveness::round_proposers_election::RoundProposers;
 
 /// The enum contains two processor
 /// StartupSyncProcessor is used to process events in order to sync up with peer if we can't recover from local consensusdb
@@ -173,7 +153,8 @@ impl<T: Payload> EpochManager<T> {
             .get_ordered_account_addresses_iter()
             .collect::<Vec<_>>();
 
-        let round_proposers = validators.get_round_proposers();
+        // let round_proposers = validators.get_round_proposers().clone();
+        let round_proposers = self.config.round_to_proposers.clone();
 
         match self.config.proposer_type {
             ConsensusProposerType::MultipleOrderedProposers => {
@@ -183,11 +164,6 @@ impl<T: Payload> EpochManager<T> {
                 proposers,
                 self.config.contiguous_rounds,
             )),
-            ConsensusProposerType::RoundProposers => Box::new(RoundProposers::new(
-                round_proposers,
-                // default proposer is set to the first validator
-                proposers[0],
-            )),
             // We don't really have a fixed proposer!
             ConsensusProposerType::FixedProposer => {
                 let proposer = choose_leader(proposers);
@@ -196,6 +172,11 @@ impl<T: Payload> EpochManager<T> {
                     self.config.contiguous_rounds,
                 ))
             }
+            ConsensusProposerType::RoundProposers => Box::new(RoundProposers::new(
+                round_proposers,
+                // default proposer is set to the first validator
+                proposers[0],
+            )),
         }
     }
 
@@ -208,13 +189,13 @@ impl<T: Payload> EpochManager<T> {
             .state_computer
             .get_epoch_proof(request.start_epoch, request.end_epoch)
             .await
-        {
-            Ok(proof) => proof,
-            Err(e) => {
-                warn!("Failed to get epoch proof from storage: {:?}", e);
-                return;
-            }
-        };
+            {
+                Ok(proof) => proof,
+                Err(e) => {
+                    warn!("Failed to get epoch proof from storage: {:?}", e);
+                    return;
+                }
+            };
         let msg = ConsensusMsg::ValidatorChangeProof::<T>(Box::new(proof));
         if let Err(e) = self.network_sender.send_to(peer_id, msg) {
             warn!(
@@ -235,7 +216,7 @@ impl<T: Payload> EpochManager<T> {
                     },
                     peer_id,
                 )
-                .await
+                    .await
             }
             // We request proof to join higher epoch
             Ordering::Greater => {

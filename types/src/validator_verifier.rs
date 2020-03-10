@@ -80,7 +80,10 @@ pub struct ValidatorVerifier<PublicKey> {
     total_voting_power: u64,
     // Used in twins testing to specify leader(s) per round.
     // Note: Round is u64
-    round_to_proposers: Option<HashMap<u64, Vec<AccountAddress>>>,
+    // round_to_proposers: Option<HashMap<u64, Vec<AccountAddress>>>,
+    // Used in twins testing to specify how many twins
+    // (needed so we can ignore twins in voting power calculations)
+    num_twins: Option<usize>,
 }
 
 impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
@@ -93,6 +96,7 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
             .values()
             .map(|x| x.voting_power)
             .sum();
+
         let quorum_voting_power = if address_to_validator_info.is_empty() {
             0
         } else {
@@ -103,7 +107,8 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
             address_to_validator_info,
             quorum_voting_power,
             total_voting_power,
-            round_to_proposers: None,
+            //round_to_proposers: None,
+            num_twins: None
         }
     }
 
@@ -130,31 +135,12 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
             address_to_validator_info,
             quorum_voting_power,
             total_voting_power,
-            round_to_proposers: None,
+            // round_to_proposers: None,
+            num_twins: None,
         })
     }
 
-    /// Adds a new node entry to address_to_validator_info
-    pub fn add_to_address_to_validator_info(
-        &mut self,
-        account_address: AccountAddress,
-        &target_account_address: &AccountAddress
-    ) {
-        let validator_info: Option<&ValidatorInfo<PublicKey>> =
-            self.address_to_validator_info.get(&target_account_address);
-
-        match validator_info {
-            None => println!("[Twins] Error: Could not add Twin to ValidatorVerifier"),
-            Some(info) => {
-                let public_key = info.public_key.to_owned();
-                self.address_to_validator_info.insert(
-                    account_address,
-                    ValidatorInfo::new(public_key, 1),
-                );
-            }
-        }
-    }
-
+    /*
     /// Sets the `round_to_proposers' field of the struct ValidatorVerifier
     pub fn set_round_to_proposers(
         &mut self,
@@ -162,6 +148,7 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
     ) {
         self.round_to_proposers = Some(round_to_proposers_map);
     }
+    */
 
     /// Helper method to initialize with a single author and public key with quorum voting power 1.
     pub fn new_single(author: AccountAddress, public_key: PublicKey) -> Self {
@@ -261,6 +248,13 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
         &self,
         authors: impl Iterator<Item = &'a AccountAddress>,
     ) -> std::result::Result<(), VerifyError> {
+
+        /*
+        println!("=================");
+        println!("For N={:?}, quorum voting power is: {:?}", self.total_voting_power, self.quorum_voting_power);
+        println!("=================");
+        */
+
         // Add voting power for valid accounts, exiting early for unknown authors
         let mut aggregated_voting_power = 0;
         for account_address in authors {
@@ -289,6 +283,7 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
         Ok(())
     }
 
+
     /// Returns the public key for this address.
     pub fn get_public_key(&self, author: &AccountAddress) -> Option<PublicKey> {
         self.address_to_validator_info
@@ -303,9 +298,27 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
             .map(|validator_info| validator_info.voting_power)
     }
 
+    /*
     /// Returns round proposers
     pub fn get_round_proposers(&self) -> Option<HashMap<u64, Vec<AccountAddress>>> {
         self.round_to_proposers.clone()
+    }
+    */
+
+
+    /// Adjusts voting power and quorum voting power; twins should not be
+    /// incorporated into those calculations
+    pub fn ignore_twins_voting_power(&mut self, num_twins: Option<usize>) {
+        match num_twins {
+            Some(n) => {
+                let n_twins = n as u64;
+                if self.total_voting_power > n_twins {
+                    self.total_voting_power = self.total_voting_power - n_twins;
+                    self.quorum_voting_power = self.total_voting_power * 2 / 3 + 1
+                }
+            },
+            None => (),
+            }
     }
 
     /// Returns an ordered list of account addresses as an `Iterator`.
@@ -344,7 +357,7 @@ impl<PublicKey> fmt::Display for ValidatorVerifier<PublicKey> {
 
 impl<PublicKey: VerifyingKey> From<&ValidatorSet<PublicKey>> for ValidatorVerifier<PublicKey> {
     fn from(validator_set: &ValidatorSet<PublicKey>) -> Self {
-        ValidatorVerifier::new(validator_set.iter().fold(BTreeMap::new(), |mut map, key| {
+        let mut validator_verifier = ValidatorVerifier::new(validator_set.iter().fold(BTreeMap::new(), |mut map, key| {
             map.insert(
                 key.account_address().clone(),
                 ValidatorInfo::new(
@@ -353,7 +366,22 @@ impl<PublicKey: VerifyingKey> From<&ValidatorSet<PublicKey>> for ValidatorVerifi
                 ),
             );
             map
-        }))
+        }));
+
+        /*
+        let opt_round_proposers = validator_set.get_round_proposers();
+
+        match opt_round_proposers {
+            Some(round_proposers) => {
+                validator_verifier.set_round_to_proposers(round_proposers.clone());
+            },
+            _ => {},
+        }
+        */
+
+        validator_verifier.ignore_twins_voting_power(validator_set.get_num_twins());
+
+        validator_verifier
     }
 }
 

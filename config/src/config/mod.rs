@@ -14,6 +14,12 @@ use std::{
 };
 use thiserror::Error;
 
+use std::collections::HashMap;
+use libra_types::account_address::AccountAddress;
+use crate::keys::KeyPair;
+use libra_crypto::{ed25519::Ed25519PrivateKey};
+
+
 mod admission_control_config;
 pub use admission_control_config::*;
 mod rpc_config;
@@ -185,6 +191,35 @@ impl NodeConfig {
         }
     }
 
+    /// This clones the underlying data including the keypair so that this config can be
+    /// used for twins
+    pub fn clone_everything(&self) -> Self {
+        Self {
+            admission_control: self.admission_control.clone(),
+            rpc: self.rpc.clone(),
+            base: self.base.clone(),
+            consensus: self.consensus.clone(),
+            debug_interface: self.debug_interface.clone(),
+            execution: self.execution.clone(),
+            full_node_networks: self
+                .full_node_networks
+                .iter()
+                .map(|c| c.clone_everything())
+                .collect(),
+            logger: self.logger.clone(),
+            metrics: self.metrics.clone(),
+            mempool: self.mempool.clone(),
+            state_sync: self.state_sync.clone(),
+            storage: self.storage.clone(),
+            test: self.test.clone(),
+            validator_network: self
+                .validator_network
+                .as_ref()
+                .map(|n| n.clone_everything()),
+            vm_config: self.vm_config.clone(),
+        }
+    }
+
     /// Determines whether a node `peer_id` is an upstream peer of a node with this NodeConfig.
     /// For a validator node, any of its validator peers are considered an upstream peer
     /// In general, a network ID is a PeerId that this node uses to uniquely identify a network it belongs to.
@@ -307,6 +342,76 @@ impl NodeConfig {
         self.set_data_dir(test.temp_dir().unwrap().to_path_buf());
         self.test = Some(test);
     }
+
+    pub fn random_with_test_and_account(template: &Self, rng: &mut StdRng, test: TestConfig, peer_id: AccountAddress) -> Self {
+        let mut config = template.clone_for_template();
+        config.random_with_test_and_account_internal(rng, test, peer_id);
+        config
+    }
+
+    fn random_with_test_and_account_internal(&mut self, rng: &mut StdRng, test: TestConfig, peer_id: AccountAddress) {
+
+        // This is ugly, creating multiple copies because keypair cannot
+        // be individually copied
+        let test_2 = test.clone();
+        let test_3 = test.clone();
+
+        let mut test_local = TestConfig::new_with_temp_dir();
+
+        if self.base.role == RoleType::Validator {
+            //test.random_account_key(rng);
+            test_local.set_account_key(test_2.account_keypair);
+            //let peer_id = peer_id;
+
+            if self.validator_network.is_none() {
+                self.validator_network = Some(NetworkConfig::default());
+            }
+
+            let validator_network = self.validator_network.as_mut().unwrap();
+            validator_network.random_with_peer_id(rng, Some(peer_id));
+
+            test_local.set_consensus_key(test_3.consensus_keypair);
+            //test.random_consensus_key(rng);
+
+        } else {
+            self.validator_network = None;
+            if self.full_node_networks.is_empty() {
+                self.full_node_networks.push(NetworkConfig::default());
+            }
+            for network in &mut self.full_node_networks {
+                network.random(rng);
+            }
+        }
+        self.set_data_dir(test_local.temp_dir().unwrap().to_path_buf());
+
+        self.test = Some(test_local);
+    }
+
+
+    /// Sets the `round_to_proposers' field of the NodeConfig field ConsensusConfig
+    pub fn set_round_to_proposers(
+        &mut self,
+        round_to_proposers_map: HashMap<u64, Vec<AccountAddress>>,
+    ) {
+        self.consensus.set_round_to_proposers(round_to_proposers_map);
+    }
+
+
+    /*
+
+   pub fn set_test(&mut self, test: TestConfig) {
+        self.test = Some(test);
+    }
+
+    pub fn set_account_key(&mut self, keypair: Option<KeyPair<Ed25519PrivateKey>>) {
+        self.test.as_ref().unwrap().set_account_key(keypair);
+    }
+
+    /*pub fn set_consensus_key(&mut self, keypair: Option<KeyPair<Ed25519PrivateKey>>) {
+        self.test.as_ref().unwrap().set_consensus_key(keypair)
+    }*/
+    */
+
 }
 
 pub trait PersistableConfig: Serialize + DeserializeOwned {

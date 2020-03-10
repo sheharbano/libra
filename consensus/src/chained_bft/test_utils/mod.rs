@@ -221,6 +221,8 @@ pub fn consensus_runtime() -> runtime::Runtime {
     if nocapture() {
         set_simple_logger("consensus");
     }
+    // Disable timeout for twins testing
+    /*
     // setup timeout for tests
     crash_handler::setup_panic_handler();
     thread::spawn(|| {
@@ -228,6 +230,7 @@ pub fn consensus_runtime() -> runtime::Runtime {
         thread::sleep(Duration::from_secs(timeout));
         panic!("Test doesn't finish in {} secs", timeout);
     });
+    */
 
     runtime::Builder::new()
         .threaded_scheduler()

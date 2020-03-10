@@ -101,6 +101,14 @@ impl<PublicKey> ValidatorPublicKeys<PublicKey> {
     pub fn network_identity_public_key(&self) -> &X25519StaticPublicKey {
         &self.network_identity_public_key
     }
+
+    /// Sets the account address
+    pub fn set_account_address(
+        &mut self,
+        account_address: AccountAddress
+    ) {
+        self.account_address = account_address;
+    }
 }
 
 impl<PublicKey: VerifyingKey> TryFrom<crate::proto::types::ValidatorPublicKeys>
@@ -139,3 +147,5 @@ impl<PublicKey: VerifyingKey> From<ValidatorPublicKeys<PublicKey>>
         }
     }
 }
+
+
