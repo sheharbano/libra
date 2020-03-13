@@ -15,7 +15,6 @@ use rand::{rngs::StdRng, SeedableRng};
 use libra_types::account_address::ADDRESS_LENGTH;
 use libra_types::account_address::AccountAddress;
 use std::{convert::TryFrom};
-use libra_crypto::ed25519::Ed25519PublicKey;
 
 pub struct ValidatorSwarm {
     pub nodes: Vec<NodeConfig>,
@@ -89,6 +88,7 @@ pub fn validator_swarm_for_testing(nodes: usize) -> ValidatorSwarm {
 }
 
 
+/// Creates a network of nodes, with twins created for target_nodes
 pub fn validator_swarm_twins(
     template: &NodeConfig,
     count: usize,
@@ -101,11 +101,11 @@ pub fn validator_swarm_twins(
     let mut validator_keys = Vec::new();
     let mut nodes = Vec::new();
 
-    let mut validator_keys_twins = Vec::new();
+    let validator_keys_twins = Vec::new();
     let mut nodes_twins = Vec::new();
     // Starting index for twin account addresses (this will appear in
-    // logs). We choose 240 (hex: f0), so twins will appear as "f0"
-    // onwards in logs
+    // logs). We choose 240 (hex: f0), so twins logs will be prefixed by
+    // f0 (and onwards)
     let mut twin_account_index = 240;
 
     // =================
@@ -141,7 +141,8 @@ pub fn validator_swarm_twins(
             network_keypairs.identity_keys.public().clone(),
         ));
 
-        let mut node_copy = node.clone_everything();
+        // We will use this to instantiate twins below
+        let node_copy = node.clone_everything();
         let test_original = node_copy.test.clone().unwrap();
 
         nodes.push(node);
@@ -151,20 +152,21 @@ pub fn validator_swarm_twins(
         // To be executed if the node is a target node for which we'll create twin
         // ==============
 
-        // For twin, we will copy everything else as target node, except networking
+        // For twin, we will copy everything same as target node, except networking
         // info and account address.
         if target_nodes.contains(&_index) {
 
             // --------------------------------
             // Set the twin's account address
-            // --------------------------------
-
+            //
             // Explanation: At the consensus layer routing decisions are
             // made based on account addresses (see relevant functions in
             // "consensus/src/chained_bft/network.rs" such as "send_vote"
-            // and "broadcast" -- they all use author, which is the same as an
-            // account address, to identify the destination node of a message)
-
+            // and "broadcast"---they all use author, which is the same as an
+            // account address, to identify the destination node of a message).
+            // We want to give the twin its own unique account address so we
+            // can decide which messages to send to the twin vs the target node
+            // --------------------------------
 
             let mut twin_address = [0; ADDRESS_LENGTH];
             // Usually account address is hash of node's public key, but for
@@ -176,11 +178,13 @@ pub fn validator_swarm_twins(
 
             let twin_account_address = AccountAddress::try_from(&twin_address[..]).unwrap();
 
-            // ================
+            // ----------------------
             // Create the twin node
-            // ================
+            // ----------------------
 
-            //let mut node_twin = NodeConfig::random_with_template(template, &mut rng);
+            // Get a 'NodeConfig' with the credentials of the target node and
+            // the given twin account address; other info (such as networking)
+            // to be generated randomly as usual (i.e. as defined in 'template')
             let mut node_twin = NodeConfig::random_with_test_and_account(template, &mut rng, test_original, twin_account_address);
 
             if randomize_ports {
@@ -211,13 +215,13 @@ pub fn validator_swarm_twins(
             ));
 
             nodes_twins.push(node_twin);
-
         }
-
     }
 
     // Some tests make assumptions about the ordering of configs in relation
     // to the FixedProposer which should be the first proposer in lexical order.
+    // We apply the expected ordering only to non-twin nodes, because in spirit
+    // the protocol is oblivious to their existence
     nodes.sort_by(|a, b| {
         let a_auth = a.validator_network.as_ref().unwrap().peer_id;
         let b_auth = b.validator_network.as_ref().unwrap().peer_id;
@@ -254,9 +258,9 @@ pub fn validator_swarm_twins(
         network.seed_peers = seed_peers.clone();
     }
 
-    //validator_keys.sort_by(|k1, k2| k1.account_address().cmp(k2.account_address()));
-
     let mut validator_set = ValidatorSet::new(validator_keys);
+    // Tell ValidatorSet about the twins, so they can be ignored in
+    // calculation of quorum voting power.
     validator_set.set_num_twins(target_nodes.len());
 
     ValidatorSwarm {
@@ -265,81 +269,11 @@ pub fn validator_swarm_twins(
     }
 }
 
+/// Creates a network of nodes, with twins created for target_nodes
 pub fn validator_swarm_for_testing_twins(nodes: usize,  target_nodes: Vec<usize>) -> ValidatorSwarm {
     let mut config = NodeConfig::default();
     config.vm_config.publishing_options = VMPublishingOption::Open;
     validator_swarm_twins(&NodeConfig::default(), nodes, [1u8; 32], true, target_nodes)
-
-    /*
-
-// --------------------------------
-// For twin, use fresh networking info
-// --------------------------------
-
-if randomize_ports {
-    node_copy.randomize_ports();
-}
-
-let network = node_copy.validator_network.as_mut().unwrap();
-network.listen_address = utils::get_available_port_in_multiaddr(true);
-network.advertised_address = network.listen_address.clone();
-
-// --------------------------------
-// Set the twin's account address
-// --------------------------------
-
-// Explanation: At the consensus layer routing decisions are
-// made based on account addresses (see relevant functions in
-// "consensus/src/chained_bft/network.rs" such as "send_vote"
-// and "broadcast" -- they all use author, which is the same as an
-// account address, to identify the destination node of a message)
-
-
-let mut twin_address = [0; ADDRESS_LENGTH];
-// Usually account address is hash of node's public key, but for
-// testing we generate account addresses that are more readable.
-// So "twin_address" below will appear in the first byte of the
-// "AccountAddress" generated by "AccountAddress::try_from"
-twin_address[0] = twin_account_index;
-twin_account_index += 1;
-
-let twin_account_address = AccountAddress::try_from(&twin_address[..]).unwrap();
-
-network.peer_id = twin_account_address;
-
-// --------------------------------
-// Set the twin's account address
-// --------------------------------
-
-let test = node_copy.test.as_ref().unwrap();
-let consensus_pubkey = test.consensus_keypair.as_ref().unwrap().public().clone();
-let network_keypairs = network
-    .network_keypairs
-    .as_ref()
-    .expect("Network keypairs are not defined");
-
-validator_keys_twins.push(ValidatorPublicKeys::new(
-    twin_account_address,
-    consensus_pubkey,
-    1, // @TODO: Add support for dynamic weights
-    network_keypairs.signing_keys.public().clone(),
-    network_keypairs.identity_keys.public().clone(),
-));
-
-// --------------------------------
-// For twin, use fresh safety rules backend
-// --------------------------------
-
-let mut storage_config = OnDiskStorageConfig::default();
-storage_config.default = true;
-node_copy.consensus.safety_rules.backend = SafetyRulesBackend::OnDiskStorage(storage_config);
-
-// ---------------------------------
-
-nodes_twins.push(node_copy);
-
-*/
-
 }
 
 

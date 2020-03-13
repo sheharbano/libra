@@ -38,17 +38,6 @@ fn test_round_proposers() {
     // Test genesis and the next block
     let quorum_cert = certificate_for_genesis();
 
-    // The function new_proposal asks for the following parameters
-    /*
-        pub fn new_proposal(
-        payload: T,
-        round: Round,
-        timestamp_usecs: u64,
-        quorum_cert: QuorumCert,
-        validator_signer: &ValidatorSigner,
-    )
-    */
-
     let good_proposal_round1_1 =
         Block::new_proposal(1, 1, 1, quorum_cert.clone(), &first_validator_signer);
 

@@ -17,8 +17,9 @@ pub struct ConsensusConfig {
     pub max_pruned_blocks_in_mem: usize,
     pub pacemaker_initial_timeout_ms: u64,
     pub safety_rules: SafetyRulesConfig,
-    // round_to_proposers: Used in twins testing to specify leader(s) per round.
-    // Note: Round is u64
+    // round_to_proposers: Used to specify leader(s) per round.
+    // Motivated by Twins, but can be used generally.
+    // Note: u64 represents the round.
     pub round_to_proposers: Option<HashMap<u64, Vec<AccountAddress>>>
 }
 

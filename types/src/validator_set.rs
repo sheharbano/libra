@@ -23,9 +23,6 @@ use std::{
     vec,
 };
 
-use std::collections::HashMap;
-use crate::{account_address::AccountAddress};
-
 static LIBRA_SYSTEM_MODULE_NAME: Lazy<Identifier> =
     Lazy::new(|| Identifier::new("LibraSystem").unwrap());
 static VALIDATOR_SET_STRUCT_NAME: Lazy<Identifier> =
@@ -57,9 +54,6 @@ pub(crate) fn validator_set_path() -> Vec<u8> {
 // Used in twins testing to specify leader(s) per round.
 // Note: Round is u64
 pub struct ValidatorSet<PublicKey>(Vec<ValidatorPublicKeys<PublicKey>>,
-                                   // round_to_proposers: Used in twins testing to specify leader(s) per round.
-                                   // Note: Round is u64
-                                   // Option<HashMap<u64, Vec<AccountAddress>>>
                                    // Used in twins testing to specify how many twins
                                    // (needed so we can ignore twins in voting power calculations)
                                    Option<usize>,
@@ -105,21 +99,6 @@ impl<PublicKey: VerifyingKey> ValidatorSet<PublicKey> {
         self.1
     }
 
-
-    /*
-    /// Sets the `round_to_proposers' field of the struct ValidatorSet
-    pub fn set_round_to_proposers(
-        &mut self,
-        round_to_proposers_map: HashMap<u64, Vec<AccountAddress>>,
-    ) {
-        self.1 = Some(round_to_proposers_map);
-    }
-
-    /// Returns round proposers
-    pub fn get_round_proposers(&self) -> &Option<HashMap<u64, Vec<AccountAddress>>> {
-        &self.1
-    }
-    */
 }
 
 impl<PublicKey> Deref for ValidatorSet<PublicKey> {

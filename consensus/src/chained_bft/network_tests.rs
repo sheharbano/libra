@@ -35,6 +35,7 @@ use std::{
 use tokio::runtime::Handle;
 
 use libra_types::account_address::AccountAddress;
+use libra_logger::prelude::*;
 
 
 /// `NetworkPlayground` mocks the network implementation and provides convenience
@@ -235,9 +236,7 @@ impl NetworkPlayground {
 
         let mut delivered = false;
 
-        // println!("Checking drop policy: Is {0} to {1} dropped in Round {2}? {3}",src, dst, round, self.is_message_dropped_round(src.clone(), dst.clone(), round));
-
-        if (!self.is_message_dropped_round(src.clone(), dst.clone(), round)) {
+        if !self.is_message_dropped_round(src.clone(), dst.clone(), round) {
             node_consensus_tx
                 .push(
                     (src, ProtocolId::from_static(CONSENSUS_DIRECT_SEND_PROTOCOL)),
@@ -247,15 +246,10 @@ impl NetworkPlayground {
             delivered = true;
         }
 
-        /*
-        else {
-            println!("Dropping message {0} -> {1} in Round {2}?", src, dst, round);
-        }
-        */
-
         (delivered, msg_copy)
     }
 
+    /// Return the round of a given message
     fn get_message_round<T: Payload>(&self, msg: ConsensusMsg<T>) -> u64 {
         match msg {
             ConsensusMsg::ProposalMsg(proposal_msg) => {
@@ -268,7 +262,8 @@ impl NetworkPlayground {
                 unboxed.vote().vote_data().proposed().round()
             }
 
-            _ => 999,
+            _ => 99999, // FIXME: Returning a value we know we will not reach.
+                        // Need better way to handle this case.
         }
     }
 
@@ -294,7 +289,7 @@ impl NetworkPlayground {
 
             // Deliver and copy message it if it's not dropped
             if !self.is_message_dropped(&src, &net_req) {
-                let (delivered, msg_copy) = self.deliver_message(src, net_req).await;
+                let (_delivered, msg_copy) = self.deliver_message(src, net_req).await;
 
                 if msg_inspector(&msg_copy) {
                     msg_copies.push(msg_copy);
@@ -373,6 +368,7 @@ impl NetworkPlayground {
             .stop_drop_message_for(src, dst)
     }
 
+    /// Check if the message from 'src' to 'dst' should be dropped in the given round
     pub fn is_message_dropped_round(&self, src: Author, dst: Author, round: u64) -> bool {
         self.drop_config_round
             .read()
@@ -380,6 +376,7 @@ impl NetworkPlayground {
             .is_message_dropped(src, dst, round)
     }
 
+    /// Drop messages from 'src' to 'dst' in the given round
     pub fn drop_message_for_round(&mut self, src: Author, dst: Author, round: u64) -> bool {
         self.drop_config_round
             .write()
@@ -387,6 +384,7 @@ impl NetworkPlayground {
             .drop_message_for(src, dst, round)
     }
 
+    /// Stop dropping messages from 'src' to 'dst' in the given round
     pub fn stop_drop_message_for_round(&mut self, src: &Author, dst: &Author, round: u64) -> bool {
         self.drop_config_round
             .write()
@@ -394,10 +392,12 @@ impl NetworkPlayground {
             .stop_drop_message_for(src, dst, round)
     }
 
+    /// Prints the entire table of per round message dropping rules
     pub fn print_drop_config_round(&mut self) {
         self.drop_config_round.read().unwrap().print();
     }
 
+    /// Creates the given per round network partitions
     pub fn split_network_round(
         &mut self,
         round_partitions: &HashMap<u64, Vec<Vec<AccountAddress>>>,
@@ -416,8 +416,6 @@ impl NetworkPlayground {
                     for src in part.iter() {
                         for idx_next_part in (idx_start_part + 1)..idx_last_part + 1 {
                             for dst in partitions[idx_next_part].iter() {
-                                //print!("({0}:{1},{2}), ",round,src.short_str(),dst.short_str());
-                                //print!("({0}:{1},{2}), ",round,dst.short_str(),src.short_str());
 
                                 // Drop messages in both directions i.e. src->dst and dst->src
                                 ret &= self.drop_message_for_round(
@@ -435,12 +433,12 @@ impl NetworkPlayground {
                     }
                 }
             }
-            //print!("\n");
         }
 
         ret
     }
 
+    /// Undo the given per round network partitions
     pub fn stop_split_network_round(
         &mut self,
         round_partitions: &HashMap<u64, Vec<Vec<AccountAddress>>>,
@@ -448,7 +446,6 @@ impl NetworkPlayground {
         let mut ret = true;
 
         for (round, partitions) in round_partitions.iter() {
-            //print!("\n");
 
             let idx_last_part = partitions.len() - 1;
 
@@ -470,7 +467,6 @@ impl NetworkPlayground {
                     }
                 }
             }
-            //print!("\n");
         }
 
         ret
@@ -479,30 +475,33 @@ impl NetworkPlayground {
 }
 
 
-// Per round DropConfig
+/// Table of per round message dropping rules
 struct DropConfigRound(HashMap<u64, DropConfig>);
 
 impl DropConfigRound {
+    /// Check if the message from 'src' to 'dst' should be dropped in the given round
     pub fn is_message_dropped(&self, src: Author, dst: Author, round: u64) -> bool {
         let mut result = false;
 
-        if (self.0.contains_key(&round)) {
+        if self.0.contains_key(&round) {
             let drop_config = self.0.get(&round).unwrap();
 
-            if (drop_config.0.contains_key(&src)) {
+            if drop_config.0.contains_key(&src) {
                 result = drop_config.0.get(&src).unwrap().contains(&dst);
             }
         }
         result
     }
 
+
+    /// Drop messages from 'src' to 'dst' in the given round
     pub fn drop_message_for(&mut self, src: Author, dst: Author, round: u64) -> bool {
-        if (!self.0.contains_key(&round)) {
-            let mut drop_config = DropConfig(HashMap::new());
+        if !self.0.contains_key(&round) {
+            let drop_config = DropConfig(HashMap::new());
             self.0.insert(round, drop_config);
         }
 
-        if (!self.0.get_mut(&round).unwrap().0.contains_key(&src)) {
+        if !self.0.get_mut(&round).unwrap().0.contains_key(&src) {
             self.0.get_mut(&round).unwrap().add_node(src);
         }
 
@@ -520,6 +519,7 @@ impl DropConfigRound {
         result
     }
 
+    /// Stop dropping messages from 'src' to 'dst' in the given round
     pub fn stop_drop_message_for(&mut self, src: &Author, dst: &Author, round: u64) -> bool {
         self.0
             .get_mut(&round)
@@ -530,13 +530,14 @@ impl DropConfigRound {
             .remove(dst)
     }
 
+    /// Prints the entire table of per round message dropping rules
     pub fn print(&self) {
-        println!("=========================");
-        println!("Printing DropConfigRound.");
-        println!("=========================");
+        debug!("=========================");
+        debug!("Printing DropConfigRound.");
+        debug!("=========================");
 
         for val in self.0.iter() {
-            println!("Round: {0}", val.0);
+            debug!("Round: {0}", val.0);
             let map = val.1;
             for each in map.0.iter() {
                 let src = each.0;
@@ -545,9 +546,9 @@ impl DropConfigRound {
                 for each_dst in dst_set.iter() {
                     print!("{0},", each_dst.short_str());
                 }
-                println!("]");
+                debug!("]");
             }
-            println!("------------------------");
+            debug!("------------------------");
         }
     }
 }
@@ -558,7 +559,7 @@ fn test_drop_message_for_round() {
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
 
     let num_nodes = 7;
-    let (signers, validator_verifier) = random_validator_verifier(num_nodes, None, false);
+    let (signers, _validator_verifier) = random_validator_verifier(num_nodes, None, false);
 
     let mut nodes = Vec::new();
     for signer in signers.iter() {
@@ -586,7 +587,7 @@ fn test_stop_drop_message_for_round() {
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
 
     let num_nodes = 7;
-    let (signers, validator_verifier) = random_validator_verifier(num_nodes, None, false);
+    let (signers, _validator_verifier) = random_validator_verifier(num_nodes, None, false);
 
     let mut nodes = Vec::new();
     for signer in signers.iter() {
@@ -619,7 +620,7 @@ fn test_split_network_round() {
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
 
     let num_nodes = 5;
-    let (signers, validator_verifier) = random_validator_verifier(num_nodes, None, false);
+    let (signers, _validator_verifier) = random_validator_verifier(num_nodes, None, false);
 
     let mut nodes = Vec::new();
     for signer in signers.iter() {
@@ -755,7 +756,7 @@ fn test_stop_split_network_round() {
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
 
     let num_nodes = 5;
-    let (signers, validator_verifier) = random_validator_verifier(num_nodes, None, false);
+    let (signers, _validator_verifier) = random_validator_verifier(num_nodes, None, false);
 
     let mut nodes = Vec::new();
     for signer in signers.iter() {
@@ -780,10 +781,6 @@ fn test_stop_split_network_round() {
     //print_round_partitions(&round_partitions);
 
     playground.split_network_round(&round_partitions);
-
-    //println!("Dropping the following messages:");
-
-    //playground.print_drop_config_round();
 
     for round in 0..3 {
         // The partitions are (for each of  3 rounds): [0], [1,2], [3,4]
@@ -886,7 +883,7 @@ fn test_stop_split_network_round() {
             .is_message_dropped(nodes[4], nodes[2], round));
     }
 
-    println!("Stop dropping the previous messages");
+    debug!("Stop dropping the previous messages");
 
     playground.stop_split_network_round(&round_partitions);
 
@@ -994,9 +991,9 @@ fn test_stop_split_network_round() {
 }
 
 fn print_round_partitions(round_partitions: &HashMap<u64, Vec<Vec<AccountAddress>>>) {
-    println!("=========================");
-    println!("Printing round partitions.");
-    println!("=========================");
+    debug!("=========================");
+    debug!("Printing round partitions.");
+    debug!("=========================");
 
     for (round, partitions) in round_partitions.iter() {
         print!("{0}: ", round);
@@ -1045,7 +1042,6 @@ use consensus_types::block_retrieval::{
 use libra_crypto::HashValue;
 #[cfg(test)]
 use libra_types::crypto_proxies::random_validator_verifier;
-use num_traits::real::Real;
 
 #[test]
 fn test_network_api() {

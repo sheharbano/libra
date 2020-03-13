@@ -153,7 +153,6 @@ impl<T: Payload> EpochManager<T> {
             .get_ordered_account_addresses_iter()
             .collect::<Vec<_>>();
 
-        // let round_proposers = validators.get_round_proposers().clone();
         let round_proposers = self.config.round_to_proposers.clone();
 
         match self.config.proposer_type {

@@ -16,8 +16,6 @@ use thiserror::Error;
 
 use std::collections::HashMap;
 use libra_types::account_address::AccountAddress;
-use crate::keys::KeyPair;
-use libra_crypto::{ed25519::Ed25519PrivateKey};
 
 
 mod admission_control_config;
@@ -343,6 +341,10 @@ impl NodeConfig {
         self.test = Some(test);
     }
 
+    // Creates a 'NodeConfig' with the given credentials in 'test'
+    // the given twin account address 'peer_id'; other info (such
+    // as networking) to be generated randomly as usual (i.e. as
+    // defined in 'template')
     pub fn random_with_test_and_account(template: &Self, rng: &mut StdRng, test: TestConfig, peer_id: AccountAddress) -> Self {
         let mut config = template.clone_for_template();
         config.random_with_test_and_account_internal(rng, test, peer_id);
@@ -351,17 +353,16 @@ impl NodeConfig {
 
     fn random_with_test_and_account_internal(&mut self, rng: &mut StdRng, test: TestConfig, peer_id: AccountAddress) {
 
-        // This is ugly, creating multiple copies because keypair cannot
-        // be individually copied
+        // This is not nice, but have to create multiple copies of entire TestConfig
+        // structure instead of just the keypair fields because keypair cannot be
+        // individually copied
         let test_2 = test.clone();
         let test_3 = test.clone();
 
         let mut test_local = TestConfig::new_with_temp_dir();
 
         if self.base.role == RoleType::Validator {
-            //test.random_account_key(rng);
             test_local.set_account_key(test_2.account_keypair);
-            //let peer_id = peer_id;
 
             if self.validator_network.is_none() {
                 self.validator_network = Some(NetworkConfig::default());
@@ -371,7 +372,6 @@ impl NodeConfig {
             validator_network.random_with_peer_id(rng, Some(peer_id));
 
             test_local.set_consensus_key(test_3.consensus_keypair);
-            //test.random_consensus_key(rng);
 
         } else {
             self.validator_network = None;
@@ -395,22 +395,6 @@ impl NodeConfig {
     ) {
         self.consensus.set_round_to_proposers(round_to_proposers_map);
     }
-
-
-    /*
-
-   pub fn set_test(&mut self, test: TestConfig) {
-        self.test = Some(test);
-    }
-
-    pub fn set_account_key(&mut self, keypair: Option<KeyPair<Ed25519PrivateKey>>) {
-        self.test.as_ref().unwrap().set_account_key(keypair);
-    }
-
-    /*pub fn set_consensus_key(&mut self, keypair: Option<KeyPair<Ed25519PrivateKey>>) {
-        self.test.as_ref().unwrap().set_consensus_key(keypair)
-    }*/
-    */
 
 }
 

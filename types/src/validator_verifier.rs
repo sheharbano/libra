@@ -8,11 +8,6 @@ use mirai_annotations::*;
 use std::{collections::BTreeMap, fmt};
 use thiserror::Error;
 
-// Bano: Check if we need this
-use crate::crypto_proxies::ValidatorSigner;
-
-use std::collections::HashMap;
-
 /// Errors possible during signature verification.
 #[derive(Debug, Error, PartialEq)]
 pub enum VerifyError {
@@ -78,9 +73,6 @@ pub struct ValidatorVerifier<PublicKey> {
     quorum_voting_power: u64,
     /// Total voting power of all validators (cached from address_to_validator_info)
     total_voting_power: u64,
-    // Used in twins testing to specify leader(s) per round.
-    // Note: Round is u64
-    // round_to_proposers: Option<HashMap<u64, Vec<AccountAddress>>>,
     // Used in twins testing to specify how many twins
     // (needed so we can ignore twins in voting power calculations)
     num_twins: Option<usize>,
@@ -139,16 +131,6 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
             num_twins: None,
         })
     }
-
-    /*
-    /// Sets the `round_to_proposers' field of the struct ValidatorVerifier
-    pub fn set_round_to_proposers(
-        &mut self,
-        round_to_proposers_map: HashMap<u64, Vec<AccountAddress>>,
-    ) {
-        self.round_to_proposers = Some(round_to_proposers_map);
-    }
-    */
 
     /// Helper method to initialize with a single author and public key with quorum voting power 1.
     pub fn new_single(author: AccountAddress, public_key: PublicKey) -> Self {
@@ -249,26 +231,12 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
         authors: impl Iterator<Item = &'a AccountAddress>,
     ) -> std::result::Result<(), VerifyError> {
 
-        /*
-        println!("=================");
-        println!("For N={:?}, quorum voting power is: {:?}", self.total_voting_power, self.quorum_voting_power);
-        println!("=================");
-        */
-
         // Add voting power for valid accounts, exiting early for unknown authors
         let mut aggregated_voting_power = 0;
         for account_address in authors {
             match self.get_voting_power(&account_address) {
                 Some(voting_power) => {
                     aggregated_voting_power += voting_power;
-
-                    /*
-                    println!("======================");
-                    println!("Author: {0}, Voting Power: {1}, Aggregated Voting Power: {2}, \
-                    Quorum Voting Power: {3}", account_address, voting_power,
-                             aggregated_voting_power, self.quorum_voting_power);
-                    println!("======================");
-                    */
                 },
                 None => return Err(VerifyError::UnknownAuthor),
             }
@@ -297,14 +265,6 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
             .get(&author)
             .map(|validator_info| validator_info.voting_power)
     }
-
-    /*
-    /// Returns round proposers
-    pub fn get_round_proposers(&self) -> Option<HashMap<u64, Vec<AccountAddress>>> {
-        self.round_to_proposers.clone()
-    }
-    */
-
 
     /// Adjusts voting power and quorum voting power; twins should not be
     /// incorporated into those calculations
@@ -367,17 +327,6 @@ impl<PublicKey: VerifyingKey> From<&ValidatorSet<PublicKey>> for ValidatorVerifi
             );
             map
         }));
-
-        /*
-        let opt_round_proposers = validator_set.get_round_proposers();
-
-        match opt_round_proposers {
-            Some(round_proposers) => {
-                validator_verifier.set_round_to_proposers(round_proposers.clone());
-            },
-            _ => {},
-        }
-        */
 
         validator_verifier.ignore_twins_voting_power(validator_set.get_num_twins());
 

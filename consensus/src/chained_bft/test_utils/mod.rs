@@ -26,7 +26,6 @@ use libra_types::block_info::BlockInfo;
 pub use mock_state_computer::{EmptyStateComputer, MockStateComputer};
 pub use mock_storage::{EmptyStorage, MockSharedStorage, MockStorage};
 pub use mock_txn_manager::MockTransactionManager;
-use std::{thread, time::Duration};
 
 pub type TestPayload = Vec<usize>;
 
@@ -221,7 +220,7 @@ pub fn consensus_runtime() -> runtime::Runtime {
     if nocapture() {
         set_simple_logger("consensus");
     }
-    // Disable timeout for twins testing
+    // Disable timeout for Twins testing
     /*
     // setup timeout for tests
     crash_handler::setup_panic_handler();
