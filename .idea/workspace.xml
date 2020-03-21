@@ -124,11 +124,11 @@
   </component>
   <component name="FileEditorManager">
     <leaf SIDE_TABS_SIZE_LIMIT_KEY="300">
-      <file pinned="false" current-in-tab="false">
+      <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/consensus/src/chained_bft/chained_bft_smr_test.rs">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="359">
-              <caret line="2187" column="8" lean-forward="true" selection-start-line="2187" selection-start-column="8" selection-end-line="2187" selection-end-column="8" />
+            <state relative-caret-position="701">
+              <caret line="2205" column="1" selection-start-line="2205" selection-start-column="1" selection-end-line="2205" selection-end-column="1" />
               <folding>
                 <element signature="e#59246#59247#0" expanded="true" />
                 <element signature="e#59296#59297#0" expanded="true" />
@@ -174,11 +174,11 @@
           </provider>
         </entry>
       </file>
-      <file pinned="false" current-in-tab="true">
+      <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/consensus/src/chained_bft/network_tests.rs">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="701">
-              <caret line="1198" selection-start-line="1198" selection-end-line="1198" />
+            <state relative-caret-position="188">
+              <caret line="1171" column="6" selection-start-line="1171" selection-start-column="6" selection-end-line="1171" selection-end-column="6" />
             </state>
           </provider>
         </entry>
@@ -257,8 +257,8 @@
       <find>create_part</find>
       <find>permutat</find>
       <find>iter</find>
-      <find>outbound_ha</find>
       <find>ignore</find>
+      <find>outbound_ha</find>
     </findStrings>
   </component>
   <component name="Git.Settings">
@@ -279,10 +279,10 @@
         <option value="$PROJECT_DIR$/config/src/generator.rs" />
         <option value="$PROJECT_DIR$/types/src/validator_signer.rs" />
         <option value="$PROJECT_DIR$/consensus/safety-rules/src/safety_rules.rs" />
-        <option value="$PROJECT_DIR$/consensus/src/chained_bft/chained_bft_smr_test.rs" />
         <option value="$PROJECT_DIR$/types/src/validator_verifier.rs" />
         <option value="$PROJECT_DIR$/types/src/validator_set.rs" />
         <option value="$PROJECT_DIR$/consensus/src/chained_bft/network_tests.rs" />
+        <option value="$PROJECT_DIR$/consensus/src/chained_bft/chained_bft_smr_test.rs" />
       </list>
     </option>
   </component>
@@ -703,19 +703,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/consensus/src/chained_bft/chained_bft_smr_test.rs">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="359">
-          <caret line="2187" column="8" lean-forward="true" selection-start-line="2187" selection-start-column="8" selection-end-line="2187" selection-end-column="8" />
-          <folding>
-            <element signature="e#59246#59247#0" expanded="true" />
-            <element signature="e#59296#59297#0" expanded="true" />
-            <element signature="e#59420#59421#0" expanded="true" />
-            <element signature="e#59453#59454#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/types/src/validator_verifier.rs">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="340">
@@ -740,8 +727,21 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/consensus/src/chained_bft/network_tests.rs">
       <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="188">
+          <caret line="1171" column="6" selection-start-line="1171" selection-start-column="6" selection-end-line="1171" selection-end-column="6" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/consensus/src/chained_bft/chained_bft_smr_test.rs">
+      <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="701">
-          <caret line="1198" selection-start-line="1198" selection-end-line="1198" />
+          <caret line="2205" column="1" selection-start-line="2205" selection-start-column="1" selection-end-line="2205" selection-end-column="1" />
+          <folding>
+            <element signature="e#59246#59247#0" expanded="true" />
+            <element signature="e#59296#59297#0" expanded="true" />
+            <element signature="e#59420#59421#0" expanded="true" />
+            <element signature="e#59453#59454#0" expanded="true" />
+          </folding>
         </state>
       </provider>
     </entry>
