@@ -13,7 +13,6 @@ use crate::{
 };
 use libra_types::{validator_info::ValidatorInfo, validator_set::ValidatorSet};
 use rand::{rngs::StdRng, SeedableRng};
-use libra_types::account_address::ADDRESS_LENGTH;
 use libra_types::account_address::AccountAddress;
 use std::{convert::TryFrom};
 
@@ -89,16 +88,15 @@ pub fn validator_swarm_for_testing(nodes: usize) -> ValidatorSwarm {
     validator_swarm(&NodeConfig::default(), nodes, [1u8; 32], true)
 }
 
-
+#[cfg(any(test, feature = "fuzzing"))]
 /// Creates a network of nodes, with twins created for target_nodes
 pub fn validator_swarm_twins(
     template: &NodeConfig,
     count: usize,
     seed: [u8; 32],
     randomize_ports: bool,
-    target_nodes: Vec<usize>
+    target_nodes: Vec<usize>,
 ) -> ValidatorSwarm {
-
     let mut rng = StdRng::from_seed(seed);
     let mut validator_keys = Vec::new();
     let mut nodes = Vec::new();
@@ -135,7 +133,7 @@ pub fn validator_swarm_twins(
             .as_ref()
             .expect("Network keypairs are not defined");
 
-        validator_keys.push(ValidatorPublicKeys::new(
+        validator_keys.push(ValidatorInfo::new(
             network.peer_id,
             consensus_pubkey,
             1, // @TODO: Add support for dynamic weights
@@ -146,6 +144,7 @@ pub fn validator_swarm_twins(
         // We will use this to instantiate twins below
         //let node_copy = node.clone_everything();
         let node_copy = node.clone();
+
         let test_original = node_copy.test.unwrap();
 
         nodes.push(node);
@@ -171,7 +170,7 @@ pub fn validator_swarm_twins(
             // can decide which messages to send to the twin vs the target node
             // --------------------------------
 
-            let mut twin_address = [0; ADDRESS_LENGTH];
+            let mut twin_address = [0; AccountAddress::LENGTH];
             // Usually account address is hash of node's public key, but for
             // testing we generate account addresses that are more readable.
             // So "twin_address" below will appear in the first byte of the
@@ -209,10 +208,10 @@ pub fn validator_swarm_twins(
                 .as_ref()
                 .expect("Network keypairs are not defined");
 
-            validator_keys.push(ValidatorPublicKeys::new(
+            validator_keys.push(ValidatorInfo::new(
                 twin_account_address,
                 consensus_pubkey,
-                1, // @TODO: Add support for dynamic weights
+                1,
                 network_keypairs.signing_keys.public().clone(),
                 network_keypairs.identity_keys.public().clone(),
             ));
@@ -261,10 +260,11 @@ pub fn validator_swarm_twins(
         network.seed_peers = seed_peers.clone();
     }
 
+
     let mut validator_set = ValidatorSet::new(validator_keys);
     // Tell ValidatorSet about the twins, so they can be ignored in
     // calculation of quorum voting power.
-    validator_set.set_num_twins(target_nodes.len());
+    //validator_set.set_num_twins(target_nodes.len());
 
     ValidatorSwarm {
         nodes,
@@ -272,12 +272,10 @@ pub fn validator_swarm_twins(
     }
 }
 
+#[cfg(any(test, feature = "fuzzing"))]
 /// Creates a network of nodes, with twins created for target_nodes
-pub fn validator_swarm_for_testing_twins(nodes: usize,  target_nodes: Vec<usize>) -> ValidatorSwarm {
+pub fn validator_swarm_for_testing_twins(nodes: usize, target_nodes: Vec<usize>) -> ValidatorSwarm {
     let mut config = NodeConfig::default();
-    config.vm_config.publishing_options = VMPublishingOption::Open;
+    config.test = Some(TestConfig::open_module());
     validator_swarm_twins(&NodeConfig::default(), nodes, [1u8; 32], true, target_nodes)
 }
-
-
-
