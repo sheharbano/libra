@@ -41,5 +41,6 @@ fn handle_panic(panic_info: &PanicInfo<'_>) {
     thread::sleep(time::Duration::from_millis(100));
 
     // Kill the process
-    process::exit(12);
+    // Twins: Don't kill the process.
+    // process::exit(12);
 }
