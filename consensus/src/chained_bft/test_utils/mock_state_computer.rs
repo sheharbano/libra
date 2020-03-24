@@ -78,8 +78,10 @@ impl StateComputer for MockStateComputer {
             .expect("Fail to notify state sync about commit");
 
         self.commit_callback
-            .unbounded_send(commit)
-            .expect("Fail to notify about commit.");
+            .unbounded_send(commit);
+        // Twins: Commenting this out as it panics when this behaviour
+        // is expected and not a cause for panic
+        //.expect("Fail to notify about commit.");
         Ok(())
     }
 

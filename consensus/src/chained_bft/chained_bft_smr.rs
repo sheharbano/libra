@@ -7,8 +7,7 @@ use crate::{
         epoch_manager::EpochManager,
         network::{NetworkReceivers, NetworkTask},
         network_interface::{ConsensusNetworkEvents, ConsensusNetworkSender},
-        persistent_liveness_storage::PersistentLivenessStorage,
-        test_utils::with_smr_id,
+        persistent_liveness_storage::PersistentLivenessStorage
     },
     consensus_provider::ConsensusProvider,
     counters,
@@ -126,7 +125,6 @@ impl<T: Payload> ConsensusProvider for ChainedBftSMR<T> {
     /// ProposerElection, Pacemaker, SafetyRules, Network(Populate with known validators), EventProcessor
     fn start(&mut self) -> Result<()> {
         let mut runtime = runtime::Builder::new()
-            .on_thread_start(with_smr_id(self.author.short_str()))
             .thread_name("consensus-")
             .threaded_scheduler()
             .enable_all()

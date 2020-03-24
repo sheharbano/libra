@@ -1931,7 +1931,7 @@ fn filter_partitions_pick_n(
     }
 }
 
-
+/*
 #[test]
 /// This function is the test generator. It produces various test cases to be
 /// fed into the test executor (execute_scenario()). Each test case represents
@@ -2204,3 +2204,4 @@ fn twins_test_safety_attack_generator() {
         num_test_cases-1, NUM_OF_NODES, f, NUM_OF_ROUNDS, NUM_OF_PARTITIONS
     );
 }
+*/

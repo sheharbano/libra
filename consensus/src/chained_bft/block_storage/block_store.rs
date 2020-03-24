@@ -188,11 +188,7 @@ impl<T: Payload> BlockStore<T> {
             "round": block_to_commit.round(),
             "parent_id": block_to_commit.parent_id().short_str(),
         );
-
-        // Commenting this out because for Twins safety test we want
-        // to check the entire tree
-        // self.prune_tree(block_to_commit.id());
-
+        self.prune_tree(block_to_commit.id());
         Ok(blocks_to_commit)
     }
 
@@ -338,11 +334,6 @@ impl<T: Payload> BlockStore<T> {
     ///
     /// Returns the block ids of the blocks removed.
     fn prune_tree(&self, next_root_id: HashValue) -> VecDeque<HashValue> {
-        /*
-        println!("=================");
-        println!("Pruning tree");
-        println!("=================");
-        */
         let id_to_remove = self
             .inner
             .read()
@@ -357,12 +348,10 @@ impl<T: Payload> BlockStore<T> {
             // executor.
             error!("fail to delete block: {:?}", e);
         }
-
         self.inner
             .write()
             .unwrap()
             .process_pruned_blocks(next_root_id, id_to_remove.clone());
-
         id_to_remove
     }
 }
@@ -390,24 +379,7 @@ impl<T: Payload> BlockReader for BlockStore<T> {
     }
 
     fn path_from_root(&self, block_id: HashValue) -> Option<Vec<Arc<ExecutedBlock<T>>>> {
-        let res = self.inner.read().unwrap().path_from_root(block_id).unwrap();
-
-        /*
-        println!("=======================");
-        println!("Printing res of length {0}", res.len());
-        println!("=======================");
-        */
-
-        /*
-        for committed in &res {
-            let time_to_commit = committed.timestamp_usecs();
-            println!("=======================");
-            println!("Time to commit {0}", time_to_commit);
-            println!("=======================");
-        }
-        */
-
-        Some(res)
+        self.inner.read().unwrap().path_from_root(block_id)
     }
 
     fn highest_certified_block(&self) -> Arc<ExecutedBlock<Self::Payload>> {

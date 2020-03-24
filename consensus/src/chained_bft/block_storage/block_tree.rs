@@ -51,8 +51,8 @@ impl<T> LinkableBlock<T> {
 }
 
 impl<T> LinkableBlock<T>
-where
-    T: Serialize + Default + PartialEq,
+    where
+        T: Serialize + Default + PartialEq,
 {
     pub fn id(&self) -> HashValue {
         self.executed_block().id()
@@ -85,8 +85,8 @@ pub struct BlockTree<T> {
 }
 
 impl<T> BlockTree<T>
-where
-    T: Serialize + Default + Debug + PartialEq,
+    where
+        T: Serialize + Default + Debug + PartialEq,
 {
     pub(super) fn new(
         root: ExecutedBlock<T>,
@@ -199,9 +199,9 @@ where
         let block_id = block.id();
         if let Some(existing_block) = self.get_block(&block_id) {
             debug!("Already had block {:?} for id {:?} when trying to add another block {:?} for the same id",
-                       existing_block,
-                       block_id,
-                       block);
+                   existing_block,
+                   block_id,
+                   block);
             checked_verify_eq!(existing_block.compute_result(), block.compute_result());
             Ok(existing_block)
         } else {
@@ -248,7 +248,6 @@ where
             .entry(block_id)
             .or_insert_with(|| Arc::clone(&qc));
 
-        // highest_ledger_info updated here
         if self.highest_commit_cert.commit_info().round() < qc.commit_info().round() {
             self.highest_commit_cert = qc;
         }
@@ -335,52 +334,19 @@ where
         loop {
             match self.get_block(&cur_block_id) {
                 Some(ref block) if block.round() <= self.root().round() => {
-                    /*
-                    println!("=======================");
-                    println!("BlockTree: First condition break");
-                    println!("Block is {0} round is {1}, and root is {2} and round is {3}",
-                             block.id(),block.round(),self.root().id(),self.root().round());
-                    println!("=======================");
-                    */
                     break;
                 }
                 Some(block) => {
-                    /*
-                    println!("=======================");
-                    println!("BlockTree: Second condition push");
-                    println!("Block is {0} round is {1}, and root is {2} and round is {3}",
-                             block.id(),block.round(),self.root().id(),self.root().round());
-                    println!("=======================");
-                    */
                     cur_block_id = block.parent_id();
                     res.push(block);
                 }
-                None => {
-                    /*
-                    println!("=======================");
-                    println!("BlockTree: NONE get_block");
-                    println!("=======================");
-                    */
-                    return None;
-                }
+                None => return None,
             }
         }
         // At this point cur_block.round() <= self.root.round()
         if cur_block_id != self.root_id {
-            /*
-            println!("=======================");
-            println!("BlockTree: NONE cur_block");
-            println!("=======================");
-            */
             return None;
         }
-
-        /*
-        println!("=======================");
-        println!("BlockTree: Printing res of length {0}", res.len());
-        println!("=======================");
-        */
-
         // Called `.reverse()` to get the chronically increased order.
         res.reverse();
         Some(res)
@@ -397,8 +363,8 @@ where
 
 #[cfg(any(test, feature = "fuzzing"))]
 impl<T> BlockTree<T>
-where
-    T: Serialize + Default + Debug + PartialEq,
+    where
+        T: Serialize + Default + Debug + PartialEq,
 {
     /// Returns the number of blocks in the tree
     pub(super) fn len(&self) -> usize {

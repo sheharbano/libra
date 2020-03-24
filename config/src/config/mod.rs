@@ -17,7 +17,6 @@ use thiserror::Error;
 use std::collections::HashMap;
 use libra_types::account_address::AccountAddress;
 
-
 mod admission_control_config;
 pub use admission_control_config::*;
 mod rpc_config;
@@ -311,18 +310,21 @@ impl NodeConfig {
     // the given twin account address 'peer_id'; other info (such
     // as networking) to be generated randomly as usual (i.e. as
     // defined in 'template')
+    #[cfg(any(test, feature = "fuzzing"))]
     pub fn random_with_test_and_account(template: &Self, rng: &mut StdRng, test: TestConfig, peer_id: AccountAddress) -> Self {
         let mut config = template.clone_for_template();
         config.random_with_test_and_account_internal(rng, test, peer_id);
         config
     }
 
+    #[cfg(any(test, feature = "fuzzing"))]
     fn random_with_test_and_account_internal(&mut self, rng: &mut StdRng, test: TestConfig, peer_id: AccountAddress) {
 
         let mut test_local = TestConfig::new_with_temp_dir();
-        
+
         if self.base.role == RoleType::Validator {
             test_local.account_keypair = test.account_keypair.clone();
+
 
             if self.validator_network.is_none() {
                 self.validator_network = Some(NetworkConfig::default());
@@ -347,7 +349,6 @@ impl NodeConfig {
         self.test = Some(test_local);
     }
 
-
     /// Sets the `round_to_proposers' field of the NodeConfig field ConsensusConfig
     pub fn set_round_to_proposers(
         &mut self,
@@ -355,7 +356,6 @@ impl NodeConfig {
     ) {
         self.consensus.set_round_to_proposers(round_to_proposers_map);
     }
-
 }
 
 pub trait PersistableConfig: Serialize + DeserializeOwned {
@@ -515,11 +515,11 @@ mod test {
             // random.default.node.config.toml
             RANDOM_COMPLETE,
         ]
-        .iter()
-        .map(|path| {
-            NodeConfig::load(PathBuf::from(path)).unwrap_or_else(|_| panic!("Error in {}", path))
-        })
-        .collect::<Vec<_>>();
+            .iter()
+            .map(|path| {
+                NodeConfig::load(PathBuf::from(path)).unwrap_or_else(|_| panic!("Error in {}", path))
+            })
+            .collect::<Vec<_>>();
     }
 
     #[test]
