@@ -2033,12 +2033,13 @@ fn filter_n_elements<T: Clone> (
 /// time cargo xtest -p consensus twins_test_safety_attack_generator
 ///
 fn twins_test_safety_attack_generator() {
-    const NUM_OF_ROUNDS: usize = 7; // FIXME: Tweak this parameter
+    const NUM_OF_ROUNDS: usize = 4; // FIXME: Tweak this parameter
     const NUM_OF_NODES: usize = 4; // FIXME: Tweak this parameter
     const NUM_OF_PARTITIONS: usize = 2; // FIXME: Tweak this parameter
 
     // If true will not execute scenarios, just print stats
-    const IS_DRY_RUN: bool = false; // FIXME: Tweak this parameter
+    const IS_DRY_RUN: bool = true; // FIXME: Tweak this parameter
+
 
     // The parameters FILTER_X_PARTITIONS and OPTION_FILTER_X_PARTITIONS let
     // us select X partition scenarios from all possible scenarios (i.e. ways
@@ -2055,6 +2056,7 @@ fn twins_test_safety_attack_generator() {
     //     2: To randomly pick *with* replacement X partition scenarios (probabilistic)
     const FILTER_X_PARTITIONS: usize = 0; // FIXME: Tweak this parameter
     const OPTION_FILTER_X_PARTITIONS: usize = 0; // FIXME: Tweak this parameter
+
 
     // The parameters FILTER_Y_PARTITIONS_WITH_LEADERS and
     // OPTION_FILTER_Y_PARTITIONS_WITH_LEADERS let us select Y testcases after
@@ -2344,6 +2346,12 @@ fn twins_test_safety_attack_generator() {
         else {
             assert!(false);
         }
+
+        // Make sure we got the right number of test cases
+        assert_eq!(
+            test_cases.len(),
+            partition_scenarios_with_leaders.len().checked_pow(NUM_OF_ROUNDS as u32).unwrap()
+        );
     }
     else if OPTION_TESTCASE_GENERATOR == 2 {
         const MAX_TESTCASES: usize = 1_000;
