@@ -1477,7 +1477,7 @@ fn twins_safety_violation_test() {
         }
 
         // Now check if the branches match at all heights
-        assert!(!is_safe(all_branches));
+        assert!(is_safe(all_branches));
 
     });
 }
@@ -1789,7 +1789,7 @@ fn execute_scenario(
 
     // Now check if the branches match at all heights
     if enable_safety_assertion {
-        assert!(!is_safe(all_branches));
+        assert!(is_safe(all_branches));
     } else {
         is_safe(all_branches);
     }
@@ -2038,59 +2038,74 @@ fn twins_test_safety_attack_generator() {
     const NUM_OF_PARTITIONS: usize = 2; // FIXME: Tweak this parameter
 
     // If true will not execute scenarios, just print stats
-    const IS_DRY_RUN: bool = true; // FIXME: Tweak this parameter
+    const IS_DRY_RUN: bool = false; // FIXME: Tweak this parameter
 
-    // The parameters FILTER_N_PARTITIONS and HOW_TO_FILTER_N_PARTITIONS give the possiblity
-    // to filter N partitions scenarios before they get permuted with leaders.
-    // The parameter FILTER_N_PARTITIONS indicates the value of N, namely how many partitions
-    // scenarios to pick; setting this parameter to 0 disables this filter. The parameter
-    // HOW_TO_FILTER_N_PARTITIONS indicates how to select those N samples; specifically,
+    // The parameters FILTER_X_PARTITIONS and OPTION_FILTER_X_PARTITIONS let
+    // us select X partition scenarios from all possible scenarios (i.e. ways
+    // in which N nodes can be partitioned into P partitions).
+    //
+    //
+    // FILTER_X_PARTITIONS: Indicates how many partition scenarios to pick;
+    // setting this parameter to 0 disables this filter.
+    //
+    // OPTION_FILTER_X_PARTITIONS: Indicates how to select those X samples;
     // it can take the following values:
-    //     0: To simply select the first N partition scenarios (deterministic)
-    //     1: To randomly pick *without* replacement N partitions`scenarios (probabilitic)
-    //     2: To randomly pick *with* replacement N partitions`scenarios (probabilitic)
-    const FILTER_N_PARTITIONS: usize = 0; // FIXME: Tweak this parameter
-    const HOW_TO_FILTER_N_PARTITIONS: usize = 0; // FIXME: Tweak this parameter
+    //     0: To simply select the first X partition scenarios (deterministic)
+    //     1: To randomly pick *without* replacement X partition scenarios (probabilistic)
+    //     2: To randomly pick *with* replacement X partition scenarios (probabilistic)
+    const FILTER_X_PARTITIONS: usize = 0; // FIXME: Tweak this parameter
+    const OPTION_FILTER_X_PARTITIONS: usize = 0; // FIXME: Tweak this parameter
 
-    // The parameters FILTER_R_PARTITIONS_WITH_LEADERS and HOW_TO_FILTER_R_PARTITIONS_WITH_LEADERS
-    // give the possiblity to filter R testcases after we permuted the partition scenarios
-    // with all possible leaders.
-    // The parameter FILTER_R_PARTITIONS_WITH_LEADERS indicates the value of R, namely how many
-    // 'scenario-leader' combinations to pick; setting this parameter to 0 disables this filter.
-    // The parameter HOW_TO_FILTER_R_PARTITIONS_WITH_LEADERS indicates how to select those R
-    // samples; specifically, it can take the following values:
-    //     0: To simply select the first M testcases (deterministic)
-    //     1: To randomly pick *without replacement* R testcases (probabilitic)
-    //     2: To randomly pick *with replacement* R testcases (probabilitic)
-    const FILTER_R_PARTITIONS_WITH_LEADERS: usize = 2; // FIXME: Tweak this parameter
-    const HOW_TO_FILTER_R_PARTITIONS_WITH_LEADERS: usize = 0; // FIXME: Tweak this parameter
+    // The parameters FILTER_Y_PARTITIONS_WITH_LEADERS and
+    // OPTION_FILTER_Y_PARTITIONS_WITH_LEADERS let us select Y testcases after
+    // we have combined partition scenarios with all possible leaders.
+    //
+    // FILTER_Y_PARTITIONS_WITH_LEADERS: Indicates how many 'scenario-leader'
+    // combinations to pick; setting this parameter to 0 disables this filter.
+    //
+    // OPTION_FILTER_Y_PARTITIONS_WITH_LEADERS: Indicates how to select those Y
+    // samples; it can take the following values:
+    //     0: To simply select the first Y testcases (deterministic)
+    //     1: To randomly pick *without replacement* Y testcases (probabilistic)
+    //     2: To randomly pick *with replacement* Y testcases (probabilistic)
+    const FILTER_Y_PARTITIONS_WITH_LEADERS: usize = 2; // FIXME: Tweak this parameter
+    const OPTION_FILTER_Y_PARTITIONS_WITH_LEADERS: usize = 0; // FIXME: Tweak this parameter
 
-    // The parameters FILTER_M_TEST_CASES and HOW_TO_FILTER_M_TEST_CASES give the possiblity
-    // to filter M testcases right before starting execution; that is, after combining the
-    // 'scenario-leaders' with the rounds.
-    // The parameter FILTER_M_TEST_CASES indicates the value of M, namely how many testcases
-    // to pick; setting this parameter to 0 disables this filter. The parameter
-    // HOW_TO_FILTER_M_TEST_CASES indicates how to select those M samples; specifically,
-    // it can take the following values:
-    //     0: To simply select the first M testcases (deterministic)
-    //     1: To randomly pick *without replacement* M testcases (probabilitic)
-    //     2: To randomly pick *with replacement* M testcases (probabilitic)
-    const FILTER_M_TEST_CASES: usize = 0; // FIXME: Tweak this parameter
-    const HOW_TO_FILTER_M_TEST_CASES: usize = 0; // FIXME: Tweak this parameter
 
-    // TWINS_PARAMETER is the main parameter of the generator. Once we have a list of
-    // 'scenario-leaders' combinations, it determines how to combine it with rounds.
+    // OPTION_TESTCASE_GENERATOR lets us choose how to distribute 'scenario-leaders'
+    // combinations over R rounds.
+    //
     // It can take the following values:
-    //     0: This mode computes the permutation *without replacement* of all 'scenario-leaders'
-    // combinations with rounds. Note that the generator will fail is there are not enought
-    // 'scenario-leaders' combinations to accomodate all rounds.
-    //     1: Compute all permutations *with replacement* of all 'scenario-leaders' with all
-    // possible rounds. This creates 2^n testcases, so it is advised to first apply some filters.
-    //     2: This mode generates 1,000 random testcases. It attributes to each round a
-    // 'scenario-leaders' combination that is randomly picked *with replacement* from
-    // all possible 'scenario-leaders' combination; it keeps picking them until it generated
-    // a total of 1,000 testcases.
-    const TWINS_PARAMETER: usize = 1; // FIXME: Tweak this parameter
+    //     0: Permute *without replacement* 'scenario-leaders' combinations over
+    //     R rounds. This requires that there are equal or more scenario-leaders
+    //     than the number of rounds.
+    //
+    //     1: Permute *with replacement* 'scenario-leaders' over R rounds.
+    //     Note that this creates 2^n testcases, so it is advised to filter
+    //     'scenario-leaders' using FILTER_Y_PARTITIONS_WITH_LEADERS
+    //
+    //     2: This mode generates 1,000 random testcases. It attributes to each
+    //     round a 'scenario-leader' combination that is randomly picked *with
+    //     replacement* from all possible 'scenario-leaders'; it keeps picking them
+    //     until it generated a total of 1,000 testcases.
+    const OPTION_TESTCASE_GENERATOR: usize = 1; // FIXME: Tweak this parameter
+
+
+
+    // The parameters FILTER_Z_TEST_CASES and OPTION_FILTER_Z_TEST_CASES let
+    // us choose Z testcases from all testcases right before starting execution;
+    // i.e., after combining the 'scenario-leaders' with the rounds.
+    //
+    // FILTER_Z_TESTCASES: Indicates how many testcases to pick; setting this
+    // parameter to 0 disables this filter.
+    //
+    // OPTION_FILTER_Z_TESTCASES: Indicates how to select those Z samples;
+    // it can take the following values:
+    //     0: To simply select the first Z testcases (deterministic)
+    //     1: To randomly pick *without replacement* Z testcases (probabilistic)
+    //     2: To randomly pick *with replacement* Z testcases (probabilistic)
+    const FILTER_Z_TESTCASES: usize = 0; // FIXME: Tweak this parameter
+    const OPTION_FILTER_Z_TESTCASES: usize = 0; // FIXME: Tweak this parameter
 
 
     let start = Instant::now();
@@ -2173,13 +2188,13 @@ fn twins_test_safety_attack_generator() {
         partition_scenarios.len(), nodes.len(), NUM_OF_NODES-f, f, NUM_OF_PARTITIONS
     );
 
-    if FILTER_N_PARTITIONS != 0 {
-        assert!(FILTER_N_PARTITIONS > 0);
+    if FILTER_X_PARTITIONS != 0 {
+        assert!(FILTER_X_PARTITIONS > 0);
         old_list_length =  partition_scenarios.len();
         filter_n_elements(
             &mut partition_scenarios,
-            FILTER_N_PARTITIONS,
-            HOW_TO_FILTER_N_PARTITIONS
+            FILTER_X_PARTITIONS,
+            OPTION_FILTER_X_PARTITIONS
         );
         println!(
             "After filtering we have {:?} partition scenarios: \
@@ -2253,13 +2268,13 @@ fn twins_test_safety_attack_generator() {
     // find how to arrange these scenarios across NUM_OF_ROUNDS rounds.
     // =============================================
 
-    if FILTER_R_PARTITIONS_WITH_LEADERS != 0 {
-        assert!(FILTER_R_PARTITIONS_WITH_LEADERS > 0);
+    if FILTER_Y_PARTITIONS_WITH_LEADERS != 0 {
+        assert!(FILTER_Y_PARTITIONS_WITH_LEADERS > 0);
         old_list_length = partition_scenarios_with_leaders.len();
         filter_n_elements(
             &mut partition_scenarios_with_leaders,
-            FILTER_R_PARTITIONS_WITH_LEADERS,
-            HOW_TO_FILTER_R_PARTITIONS_WITH_LEADERS
+            FILTER_Y_PARTITIONS_WITH_LEADERS,
+            OPTION_FILTER_Y_PARTITIONS_WITH_LEADERS
         );
         println!(
             "After filtering we have {:?} scenario-leader combinations: \
@@ -2274,7 +2289,7 @@ fn twins_test_safety_attack_generator() {
     // we need to repeat the same scenarios for multiple rounds which is
     // "permutations with replacement" and not implemented.
     let mut test_cases = Vec::new();
-    if TWINS_PARAMETER == 0 {
+    if OPTION_TESTCASE_GENERATOR == 0 {
         assert!(partition_scenarios_with_leaders.len() >= NUM_OF_ROUNDS);
         println!(
             "Now generating test cases by permuting (without replacement) {:?} \
@@ -2290,7 +2305,7 @@ fn twins_test_safety_attack_generator() {
             test_cases.push(perm)
         }
     }
-    else if TWINS_PARAMETER == 1 {
+    else if OPTION_TESTCASE_GENERATOR == 1 {
         assert!(partition_scenarios_with_leaders.len() > 0);
         println!(
             "Now generating test cases by permuting (with replacement) {:?} \
@@ -2330,7 +2345,7 @@ fn twins_test_safety_attack_generator() {
             assert!(false);
         }
     }
-    else if TWINS_PARAMETER == 2 {
+    else if OPTION_TESTCASE_GENERATOR == 2 {
         const MAX_TESTCASES: usize = 1_000;
         println!(
             "Now generating {:?} test cases by picking (with replacement) {:?} \
@@ -2354,18 +2369,18 @@ fn twins_test_safety_attack_generator() {
         }
     }
     else {
-        println!("{:?} is an invalid TWINS_PARAMETER", TWINS_PARAMETER);
+        println!("{:?} is an invalid OPTION_TESTCASE_GENERATOR", OPTION_TESTCASE_GENERATOR);
         assert!(false)
     }
 
     println!("We have generated {:?} testcases.", test_cases.len());
-    if FILTER_M_TEST_CASES != 0 {
-        assert!(FILTER_M_TEST_CASES > 0);
+    if FILTER_Z_TESTCASES != 0 {
+        assert!(FILTER_Z_TESTCASES > 0);
         old_list_length = test_cases.len();
         filter_n_elements(
             &mut test_cases,
-            FILTER_M_TEST_CASES,
-            HOW_TO_FILTER_M_TEST_CASES
+            FILTER_Z_TESTCASES,
+            OPTION_FILTER_Z_TESTCASES
         );
         println!(
             "After filtering, we have {:?} testcases: we filtered out {:?} testcases.",
