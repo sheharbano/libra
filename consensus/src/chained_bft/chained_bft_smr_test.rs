@@ -2287,7 +2287,7 @@ fn twins_test_safety_attack_generator() {
     // Permutation of n objects into r places, P(n,r) requires that n >= r.
     // Informally, number of rounds should be less than scenarios, otherwise
     // we need to repeat the same scenarios for multiple rounds which is
-    // "permutations with replacement" and not implemented.
+    // "permutations with replacement" (OPTION_TESTCASE_GENERATOR = 2) .
     let mut test_cases = Vec::new();
     if OPTION_TESTCASE_GENERATOR == 0 {
         assert!(partition_scenarios_with_leaders.len() >= NUM_OF_ROUNDS);
