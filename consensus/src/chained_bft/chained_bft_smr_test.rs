@@ -40,10 +40,12 @@ use std::collections::HashMap;
 use consensus_types::{common::Round, executed_block::ExecutedBlock};
 use libra_types::account_address::AccountAddress;
 use libra_config::config::ConsensusProposerType::RoundProposers;
+use itertools::enumerate;
 use itertools::Itertools;
 use rand::Rng;
 use libra_logger::prelude::*;
 use std::collections::HashSet;
+use std::time::{Duration, Instant};
 
 /// Auxiliary struct that is preparing SMR for the test
 struct SMRNode {
@@ -1893,45 +1895,129 @@ fn test_stirling2() {
 }
 
 
-/// This function filters an input vector of partitions down to
-/// 'n' partitions. How 'n' partitions are selected depends on
-/// the value of 'parameter':
-///     0: Pick the first n partitions (not at random)
-///     1: Randomly pick partitions without repetitions
-///     2: Randomly pick partitions with repetition
-fn filter_partitions_pick_n(
-    list_of_partitions: &mut Vec<Vec<Vec<usize>>>,
-    n: usize,
-    parameter: usize
-) {
-    if n > list_of_partitions.len() {
-        return;
-    }
-    match parameter {
-        0 => list_of_partitions.truncate(n),
-        1 | 2 => {
-            let mut rng = rand::thread_rng();
-            let mut dice = rng.gen_range(0, list_of_partitions.len());
-            let mut seen = Vec::new();
-            // Pick n random indices, copy their value to beginning of list_of_partitions
-            // and truncate rest of list_of_partitions
-            for i in 0..n {
-                list_of_partitions[i] = list_of_partitions[dice].clone();
-                if parameter == 1 {
-                    seen.push(dice);
-                }
-                // Repeatedly roll the dice until we get an unseen value
-                while seen.contains(&dice) {
-                    dice = rng.gen_range(0, list_of_partitions.len());
+// Filter the set of possible partitions by remove some that are unlikely
+// to produce useful results.
+fn filter_partitions(
+    list_of_partitions: Vec<Vec<Vec<usize>>>,
+    num_of_nodes: usize,
+) -> Vec<Vec<Vec<usize>>> {
+    // Find the index of bad and twin nodes.
+    // By convention, the first f nodes are bad, and the last f are their twins.
+    let f: usize = (num_of_nodes - 1) / 3;
+    let bad_nodes: Vec<usize> = (0..f).collect();
+    let twin_nodes: Vec<usize> = (num_of_nodes..num_of_nodes + f).collect();
+
+    // Remove partitions.
+    let mut filtered_list_of_partitions = Vec::new();
+    for partitions in list_of_partitions {
+        let mut to_remove = false;
+        for partition in partitions.clone() {
+            // Remove the partitions if the node and its twin are both
+            // in the same partition.
+            for (i, bad_node) in enumerate(bad_nodes.clone()) {
+                let twin_node = twin_nodes[i];
+                if partition.contains(&bad_node) && partition.contains(&twin_node) {
+                    to_remove = true;
                 }
             }
-            list_of_partitions.truncate(n);
+        }
+        if !to_remove {
+            filtered_list_of_partitions.push(partitions.clone());
+        }
+    }
+    filtered_list_of_partitions
+}
+
+#[test]
+/// cargo xtest -p consensus test_filter_partitions -- --nocapture
+fn test_filter_partitions() {
+    let num_of_nodes = 4;
+    let f = 1;
+    let list_of_partitions = stirling2(num_of_nodes + f, 2);
+    let filtered_list_of_partitions = filter_partitions(list_of_partitions, num_of_nodes);
+    assert_eq!(
+        filtered_list_of_partitions,
+        vec![
+            vec![vec![0, 1, 2, 3], vec![4]],
+            //vec![vec![0, 1, 2, 4], vec![3]],
+            //vec![vec![0, 1, 3, 4], vec![2]],
+            //vec![vec![0, 2, 3, 4], vec![1]],
+            //vec![vec![0, 3, 4], vec![1, 2]],
+            //vec![vec![0, 1, 4], vec![2, 3]],
+            //vec![vec![0, 2, 4], vec![1, 3]],
+            //vec![vec![0, 4], vec![1, 2, 3]],
+            vec![vec![0, 1, 2], vec![3, 4]],
+            vec![vec![0, 1, 3], vec![2, 4]],
+            vec![vec![0, 2, 3], vec![1, 4]],
+            vec![vec![0, 3], vec![1, 2, 4]],
+            vec![vec![0, 1], vec![2, 3, 4]],
+            vec![vec![0, 2], vec![1, 3, 4]],
+            vec![vec![0], vec![1, 2, 3, 4]],
+        ]
+    );
+}
+
+
+/// This function filters an input vector down to 'n' elements. How these 'n' elements
+/// are selected  depends on the value of 'parameter':
+///     0: Pick the first n elements (deterministic)
+///     1: Randomly pick n elements without repetitions
+///     2: Randomly pick n elements with repetition
+fn filter_n_elements<T: Clone> (
+    list: &mut Vec<T>,
+    n: usize,
+    parameter: usize
+){
+    match parameter {
+        // deterministically truncate (if necessary)
+        0 => {
+            if n < list.len() {
+                list.truncate(n)
+            }
         },
-        _ => assert!(false) // never reached
+        // pick without replacement
+        1  => {
+            if n >= list.len() {
+                return;
+            }
+            let original_list = list.clone();
+            let mut rng = rand::thread_rng();
+            let mut dice = rng.gen_range(0, original_list.len());
+            let mut seen = Vec::new();
+            // Pick n random indices, copy their value to beginning of list
+            // and truncate rest of list
+            for i in 0..n {
+                list[i] = original_list[dice].clone();
+                seen.push(dice);
+                // Repeatedly roll the dice until we get an unseen value
+                while seen.contains(&dice) {
+                    dice = rng.gen_range(0, original_list.len());
+                }
+            }
+            list.truncate(n);
+        },
+        // pick with replacement
+        2 => {
+            let original_list = list.clone();
+            // extend the list if necessary
+            while list.len() < n {
+                list.push(list[0].clone());
+            }
+            let mut rng = rand::thread_rng();
+            let mut dice = rng.gen_range(0, original_list.len());
+            // Pick n random indices, copy their value to beginning of list
+            // and truncate rest of list
+            for i in 0..n {
+                list[i] = original_list[dice].clone();
+                dice = rng.gen_range(0, original_list.len());
+            }
+            list.truncate(n);
+        }
+        _ => assert!(false)
     }
 }
 
-/*
+
 #[test]
 /// This function is the test generator. It produces various test cases to be
 /// fed into the test executor (execute_scenario()). Each test case represents
@@ -1950,27 +2036,64 @@ fn twins_test_safety_attack_generator() {
     const NUM_OF_ROUNDS: usize = 7; // FIXME: Tweak this parameter
     const NUM_OF_NODES: usize = 4; // FIXME: Tweak this parameter
     const NUM_OF_PARTITIONS: usize = 2; // FIXME: Tweak this parameter
-    const PARTITIONS_PICK_N: usize = 8; // FIXME: Tweak this parameter
-    // How many partitions to pick from all possible partition scenarios
-    // This is a filtering mechanism essentially.
-    const PICK_PARTITIONS_PARAM: usize = 0; // FIXME: Tweak this parameter
-    // Parameter to select partitions:
-    //     0: Pick the first n partitions (not at random)
-    //     1: Randomly pick partitions without repetitions
-    //     2: Randomly pick partitions with repetition
-    const WITH_REPLACEMENT: bool = false; // FIXME: Tweak this parameter
-    // Whether to permute partition scenarios (and corresponding leader)
-    // over R rounds *with replacement*
-    // TODO: Not implemented yet
 
-    const IS_DRY_RUN: bool = false; // FIXME: Tweak this parameter
     // If true will not execute scenarios, just print stats
+    const IS_DRY_RUN: bool = true; // FIXME: Tweak this parameter
 
-    let f = (NUM_OF_NODES - 1) / 3;
+    // The parameters FILTER_N_PARTITIONS and HOW_TO_FILTER_N_PARTITIONS give the possiblity
+    // to filter N partitions scenarios before they get permuted with leaders.
+    // The parameter FILTER_N_PARTITIONS indicates the value of N, namely how many partitions
+    // scenarios to pick; setting this parameter to 0 disables this filter. The parameter
+    // HOW_TO_FILTER_N_PARTITIONS indicates how to select those N samples; specifically,
+    // it can take the following values:
+    //     0: To simply select the first N partition scenarios (deterministic)
+    //     1: To randomly pick *without* replacement N partitions`scenarios (probabilitic)
+    //     2: To randomly pick *with* replacement N partitions`scenarios (probabilitic)
+    const FILTER_N_PARTITIONS: usize = 0; // FIXME: Tweak this parameter
+    const HOW_TO_FILTER_N_PARTITIONS: usize = 0; // FIXME: Tweak this parameter
 
-    // TODO: Once we implement permutations with replacement (see
-    // 'WITH_REPLACEMENT' above), then remove this assert statement
-    assert!(PARTITIONS_PICK_N >= NUM_OF_ROUNDS);
+    // The parameters FILTER_R_PARTITIONS_WITH_LEADERS and HOW_TO_FILTER_R_PARTITIONS_WITH_LEADERS
+    // give the possiblity to filter R testcases after we permuted the partition scenarios
+    // with all possible leaders.
+    // The parameter FILTER_R_PARTITIONS_WITH_LEADERS indicates the value of R, namely how many
+    // 'scenario-leader' combinations to pick; setting this parameter to 0 disables this filter.
+    // The parameter HOW_TO_FILTER_R_PARTITIONS_WITH_LEADERS indicates how to select those R
+    // samples; specifically, it can take the following values:
+    //     0: To simply select the first M testcases (deterministic)
+    //     1: To randomly pick *without replacement* R testcases (probabilitic)
+    //     2: To randomly pick *with replacement* R testcases (probabilitic)
+    const FILTER_R_PARTITIONS_WITH_LEADERS: usize = 2; // FIXME: Tweak this parameter
+    const HOW_TO_FILTER_R_PARTITIONS_WITH_LEADERS: usize = 0; // FIXME: Tweak this parameter
+
+    // The parameters FILTER_M_TEST_CASES and HOW_TO_FILTER_M_TEST_CASES give the possiblity
+    // to filter M testcases right before starting execution; that is, after combining the
+    // 'scenario-leaders' with the rounds.
+    // The parameter FILTER_M_TEST_CASES indicates the value of M, namely how many testcases
+    // to pick; setting this parameter to 0 disables this filter. The parameter
+    // HOW_TO_FILTER_M_TEST_CASES indicates how to select those M samples; specifically,
+    // it can take the following values:
+    //     0: To simply select the first M testcases (deterministic)
+    //     1: To randomly pick *without replacement* M testcases (probabilitic)
+    //     2: To randomly pick *with replacement* M testcases (probabilitic)
+    const FILTER_M_TEST_CASES: usize = 0; // FIXME: Tweak this parameter
+    const HOW_TO_FILTER_M_TEST_CASES: usize = 0; // FIXME: Tweak this parameter
+
+    // TWINS_PARAMETER is the main parameter of the generator. Once we have a list of
+    // 'scenario-leaders' combinations, it determines how to combine it with rounds.
+    // It can take the following values:
+    //     0: This mode computes the permutation *without replacement* of all 'scenario-leaders'
+    // combinations with rounds. Note that the generator will fail is there are not enought
+    // 'scenario-leaders' combinations to accomodate all rounds.
+    //     1: Compute all permutations *with replacement* of all 'scenario-leaders' with all
+    // possible rounds. This creates 2^n testcases, so it is advised to first apply some filters.
+    //     2: This mode generates 1,000 random testcases. It attributes to each round a
+    // 'scenario-leaders' combination that is randomly picked *with replacement* from
+    // all possible 'scenario-leaders' combination; it keeps picking them until it generated
+    // a total of 1,000 testcases.
+    const TWINS_PARAMETER: usize = 1; // FIXME: Tweak this parameter
+
+
+    let start = Instant::now();
 
     // =============================================
     //
@@ -1990,6 +2113,8 @@ fn twins_test_safety_attack_generator() {
     //
     // =============================================
 
+    let mut old_list_length; // used later as a temporary variable
+    let f = (NUM_OF_NODES - 1) / 3;
     let mut nodes: Vec<usize> = Vec::new();
 
     // First fill the target nodes. By convention, the first nodes are the target nodes.
@@ -2006,7 +2131,7 @@ fn twins_test_safety_attack_generator() {
 
     // This data structure is required by `execute_scenario()` which we
     // call at the end to execute generated tests.
-    // `node_to_twin` maps `target_nodes` to twins indices in 'nodes'
+    // node_to_twin` maps `target_nodes` to twins indices in 'nodes'
     // to corresponding twin indices in 'nodes'. For example, we get
     // twin for nodes[1] as follows:  nodes[node_to_twin.get(1)]
     let mut node_to_twin: HashMap<usize, usize> = HashMap::new();
@@ -2042,27 +2167,27 @@ fn twins_test_safety_attack_generator() {
     // of them from the list if the tests take too much time.
 
     let mut partition_scenarios = stirling2(nodes.len(), NUM_OF_PARTITIONS);
-    debug!(
-        "There are {:?} ways to allocate {:?} nodes ({:?} honest nodes + {:?} twins) into {:?} partitions.",
+    println!(
+        "There are {:?} ways to allocate {:?} nodes ({:?} honest nodes + {:?} twins) \
+        into {:?} partitions.",
         partition_scenarios.len(), nodes.len(), NUM_OF_NODES-f, f, NUM_OF_PARTITIONS
     );
-    let old_list_of_partition_length = partition_scenarios.len();
 
-    // Filter the partitions that have both twins in the same partition.
-    //partition_scenarios = filter_partitions(partition_scenarios, NUM_OF_NODES);
-
-    // Choose only two partitions
-    filter_partitions_pick_n(
-        &mut partition_scenarios,
-        PARTITIONS_PICK_N,
-        PICK_PARTITIONS_PARAM
-    );
-
-    debug!(
-        "After filtering, we have {:?} partition scenarios (we filtered out {:?} scenarios).",
-        partition_scenarios.len(),
-        old_list_of_partition_length - partition_scenarios.len()
-    );
+    if FILTER_N_PARTITIONS != 0 {
+        assert!(FILTER_N_PARTITIONS > 0);
+        old_list_length =  partition_scenarios.len();
+        filter_n_elements(
+            &mut partition_scenarios,
+            FILTER_N_PARTITIONS,
+            HOW_TO_FILTER_N_PARTITIONS
+        );
+        println!(
+            "After filtering we have {:?} partition scenarios: \
+            we filtered out {:?} scenarios.",
+            partition_scenarios.len(),
+            old_list_length - partition_scenarios.len()
+        );
+    }
 
     // =============================================
     //
@@ -2117,8 +2242,9 @@ fn twins_test_safety_attack_generator() {
 
     // Don't need 'partition_scenarios' any more
     partition_scenarios.clear();
-    debug!(
-        "After combining leaders with partition scenarios, we have {:?} scenario-leader combinations).",
+    println!(
+        "After combining leaders with partition scenarios, we have {:?} scenario-leader \
+        combinations.",
         partition_scenarios_with_leaders.len()
     );
 
@@ -2127,81 +2253,189 @@ fn twins_test_safety_attack_generator() {
     // find how to arrange these scenarios across NUM_OF_ROUNDS rounds.
     // =============================================
 
+    if FILTER_R_PARTITIONS_WITH_LEADERS != 0 {
+        assert!(FILTER_R_PARTITIONS_WITH_LEADERS > 0);
+        old_list_length = partition_scenarios_with_leaders.len();
+        filter_n_elements(
+            &mut partition_scenarios_with_leaders,
+            FILTER_R_PARTITIONS_WITH_LEADERS,
+            HOW_TO_FILTER_R_PARTITIONS_WITH_LEADERS
+        );
+        println!(
+            "After filtering we have {:?} scenario-leader combinations: \
+            we filtered out {:?} scenarios.",
+            partition_scenarios_with_leaders.len(),
+            old_list_length - partition_scenarios_with_leaders.len()
+        );
+    }
+
     // Permutation of n objects into r places, P(n,r) requires that n >= r.
     // Informally, number of rounds should be less than scenarios, otherwise
     // we need to repeat the same scenarios for multiple rounds which is
     // "permutations with replacement" and not implemented.
-    //
-    // Note: If we want to reuse scenarios in a test case, we'll need to
-    // calculate "permutations with replacement". We decided not to do that
-    // for now to limit the number of test cases
-    //
-    assert!(partition_scenarios_with_leaders.len() >= NUM_OF_ROUNDS); // never reached
+    let mut test_cases = Vec::new();
+    if TWINS_PARAMETER == 0 {
+        assert!(partition_scenarios_with_leaders.len() >= NUM_OF_ROUNDS);
+        println!(
+            "Now generating test cases by permuting (without replacement) {:?} \
+            scenario-leader combinations over {:?} rounds.",
+            partition_scenarios_with_leaders.len(),
+            NUM_OF_ROUNDS
+        );
 
-    let test_cases = partition_scenarios_with_leaders
-        .iter()
-        .permutations(NUM_OF_ROUNDS);
+        let permutations = partition_scenarios_with_leaders
+            .iter()
+            .permutations(NUM_OF_ROUNDS);
+        for perm in permutations {
+            test_cases.push(perm)
+        }
+    }
+    else if TWINS_PARAMETER == 1 {
+        assert!(partition_scenarios_with_leaders.len() > 0);
+        println!(
+            "Now generating test cases by permuting (with replacement) {:?} \
+            scenario-leader combinations over {:?} rounds",
+            partition_scenarios_with_leaders.len(),
+            NUM_OF_ROUNDS
+        );
 
-    // TODO: Implement permutations with replacement
+        let length = partition_scenarios_with_leaders.len();
+
+        if NUM_OF_ROUNDS == 4 {
+            for (i1, i2, i3, i4) in iproduct!(0..length, 0..length, 0..length, 0..length) {
+               let mut each_test = Vec::new();
+               each_test.push(&partition_scenarios_with_leaders[i1]);
+               each_test.push(&partition_scenarios_with_leaders[i2]);
+               each_test.push(&partition_scenarios_with_leaders[i3]);
+               each_test.push(&partition_scenarios_with_leaders[i4]);
+               test_cases.push(each_test);
+            }
+        }
+        else if NUM_OF_ROUNDS == 7 {
+            for (i1, i2, i3, i4, i5, i6, i7) in iproduct!(
+                0..length, 0..length, 0..length, 0..length, 0..length, 0..length, 0..length
+            ) {
+               let mut each_test = Vec::new();
+               each_test.push(&partition_scenarios_with_leaders[i1]);
+               each_test.push(&partition_scenarios_with_leaders[i2]);
+               each_test.push(&partition_scenarios_with_leaders[i3]);
+               each_test.push(&partition_scenarios_with_leaders[i4]);
+               each_test.push(&partition_scenarios_with_leaders[i5]);
+               each_test.push(&partition_scenarios_with_leaders[i6]);
+               each_test.push(&partition_scenarios_with_leaders[i7]);
+               test_cases.push(each_test);
+            }
+        }
+        else {
+            assert!(false);
+        }
+    }
+    else if TWINS_PARAMETER == 2 {
+        const MAX_TESTCASES: usize = 1_000;
+        println!(
+            "Now generating {:?} test cases by picking (with replacement) {:?} \
+            scenario-leader combinations ({:?} rounds x {:?} test cases \
+            = {:?})",
+            MAX_TESTCASES,
+            NUM_OF_ROUNDS*MAX_TESTCASES,
+            NUM_OF_ROUNDS,
+            MAX_TESTCASES,
+            NUM_OF_ROUNDS*MAX_TESTCASES
+        );
+
+        let mut rng = rand::thread_rng();
+        for i in 0..MAX_TESTCASES {
+            let mut each_test = Vec::new();
+            for j in 0..NUM_OF_ROUNDS {
+                let mut dice = rng.gen_range(0, partition_scenarios_with_leaders.len());
+                each_test.push(&partition_scenarios_with_leaders[dice]);
+            }
+            test_cases.push(each_test);
+        }
+    }
+    else {
+        println!("{:?} is an invalid TWINS_PARAMETER", TWINS_PARAMETER);
+        assert!(false)
+    }
+
+    println!("We have generated {:?} testcases.", test_cases.len());
+    if FILTER_M_TEST_CASES != 0 {
+        assert!(FILTER_M_TEST_CASES > 0);
+        old_list_length = test_cases.len();
+        filter_n_elements(
+            &mut test_cases,
+            FILTER_M_TEST_CASES,
+            HOW_TO_FILTER_M_TEST_CASES
+        );
+        println!(
+            "After filtering, we have {:?} testcases: we filtered out {:?} testcases.",
+            test_cases.len(),
+            old_list_length - test_cases.len()
+        );
+    }
+
 
     // =============================================
     // Now we are ready to prepare and execute each scenario via the executor
     // =============================================
 
-    debug!(
-        "Now generating and executing test cases by permuting {:?} \
-        scenario-leader combinations from the previous step over {:?} rounds).",
-        partition_scenarios_with_leaders.len(),
-        NUM_OF_ROUNDS
-    );
-
     let mut round = 1;
     let mut num_test_cases = 1;
 
     for each_test in test_cases {
-        debug!("=====================================");
-        debug!("TEST CASE {:?}:  {:?}", num_test_cases, &each_test);
-        debug!("=====================================");
 
-        // Creating data structures that specify round-by-round network partitions
-        // and leaders
-        //
-        // Maps round to partitions (nodes are expressed in terms of their indices)
-        let mut round_partitions_idx = HashMap::new();
-        // Maps round to leaders (nodes are expressed in terms of their indices)
-        let mut twins_round_proposers_idx = HashMap::new();
-        for round_scenario in each_test {
-            let leader = round_scenario.0.clone();
-            let scenario = round_scenario.1.clone();
-            let mut leaders = Vec::new();
-            leaders.push(leader.clone());
-            // If a target node is leader, make its twin the leader too
-            if target_nodes.contains(&leader) {
-                let twin_node = node_to_twin.get(&leader).unwrap().clone();
-                leaders.push(twin_node.clone());
+        if num_test_cases > 0 {
+            if (!IS_DRY_RUN) {
+                println!("=====================================");
+                println!("TEST CASE {:?}:  {:?}", num_test_cases, &each_test);
+                println!("=====================================");
             }
-            twins_round_proposers_idx.insert(round, leaders);
-            round_partitions_idx.insert(round, scenario);
-            round += 1;
-        }
 
-        if !IS_DRY_RUN {
-            execute_scenario(
-                NUM_OF_NODES,
-                &target_nodes,
-                &node_to_twin,
-                round_partitions_idx,      // this changes for each test
-                twins_round_proposers_idx, // this changes for each test
-                false,
-            );
+            // Creating data structures that specify round-by-round network partitions
+            // and leaders
+            //
+            // Maps round to partitions (nodes are expressed in terms of their indices)
+            let mut round_partitions_idx = HashMap::new();
+            // Maps round to leaders (nodes are expressed in terms of their indices)
+            let mut twins_round_proposers_idx = HashMap::new();
+            for round_scenario in each_test {
+                let leader = round_scenario.0.clone();
+                let scenario = round_scenario.1.clone();
+                let mut leaders = Vec::new();
+                leaders.push(leader.clone());
+                // If a target node is leader, make its twin the leader too
+                if target_nodes.contains(&leader) {
+                    let twin_node = node_to_twin.get(&leader).unwrap().clone();
+                    leaders.push(twin_node.clone());
+                }
+                twins_round_proposers_idx.insert(round, leaders);
+                round_partitions_idx.insert(round, scenario);
+                round += 1;
+            }
+
+            if (!IS_DRY_RUN) {
+                let start_execution = Instant::now();
+                execute_scenario(
+                    NUM_OF_NODES,
+                    &target_nodes,
+                    &node_to_twin,
+                    round_partitions_idx,      // this changes for each test
+                    twins_round_proposers_idx, // this changes for each test
+                    true,
+                );
+                let execution_duration = start_execution.elapsed();
+                println!(
+                    "Time elapsed for execution only is: {:?} ms",
+                    execution_duration.as_millis()
+                );
+            }
+            num_test_cases += 1;
         }
-        num_test_cases += 1;
     }
 
-    debug!(
+    println!(
         "\nFinished running total {:?} test cases for {:?} nodes, {:?} twins, \
          {:?} rounds and {:?} partitions\n",
         num_test_cases-1, NUM_OF_NODES, f, NUM_OF_ROUNDS, NUM_OF_PARTITIONS
     );
 }
-*/

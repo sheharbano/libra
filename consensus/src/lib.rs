@@ -33,3 +33,5 @@ mod counters;
 mod state_computer;
 mod state_replication;
 mod txn_manager;
+
+#[macro_use] extern crate itertools;
