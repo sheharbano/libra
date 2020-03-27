@@ -24,7 +24,7 @@ use std::{
 #[path = "pending_votes_test.rs"]
 mod pending_votes_test;
 
-struct LastVoteInfo {
+pub struct LastVoteInfo {
     li_digest: HashValue,
     round: Round,
     is_timeout: bool, // true if a vote includes a round signature that can be aggregated to TC
@@ -49,8 +49,8 @@ pub struct PendingVotes {
     /// Map of Author to last vote info. Any pending vote from Author is cleaned up
     /// whenever a new vote is added by same Author
     author_to_last_voted_info: HashMap<Author, LastVoteInfo>,
-    ///Map of PublicKey to last vote info.
-    key_to_last_voted_info: HashMap<Ed25519PublicKey, LastVoteInfo>,
+    ///Map of PublicKey to last vote info and the key's Author.
+    key_to_last_voted_info: HashMap<Ed25519PublicKey, (LastVoteInfo, Author)>,
 }
 
 impl PendingVotes {
@@ -71,9 +71,13 @@ impl PendingVotes {
         validator_verifier: &ValidatorVerifier,
     ) -> VoteReceptionResult {
         if let Err(e) = self.replace_prev_vote_twins(vote, &validator_verifier) {
+        //if let Err(e) = self.replace_prev_vote(vote) {
             return e;
         }
-        let vote_aggr_res = self.aggregate_qc(vote, validator_verifier);
+
+        //let vote_aggr_res = self.aggregate_qc(vote, validator_verifier);
+        let vote_aggr_res = self.aggregate_qc_twins(vote, validator_verifier);
+
         if let VoteReceptionResult::NewQuorumCertificate(_) = vote_aggr_res {
             return vote_aggr_res;
         }
@@ -86,6 +90,39 @@ impl PendingVotes {
     }
 
     /// Check whether the newly inserted vote completes a QC
+    fn aggregate_qc_twins(
+        &mut self,
+        vote: &Vote,
+        validator_verifier: &ValidatorVerifier,
+    ) -> VoteReceptionResult {
+        // Note that the digest covers the ledger info information, which is also indirectly
+        // covering vote data hash (in its `consensus_data_hash` field).
+        let li_digest = vote.ledger_info().hash();
+        //let li_digest = vote.ledger_info().commit_info().id();
+
+
+        let li_with_sig = self.li_digest_to_votes.entry(li_digest).or_insert_with(|| {
+            LedgerInfoWithSignatures::new(vote.ledger_info().clone(), BTreeMap::new())
+        });
+        li_with_sig.add_signature(vote.author(), vote.signature().clone());
+
+        match validator_verifier.check_voting_power(li_with_sig.signatures().keys()) {
+            Ok(_) => VoteReceptionResult::NewQuorumCertificate(Arc::new(QuorumCert::new(
+                vote.vote_data().clone(),
+                li_with_sig.clone(),
+            ))),
+            Err(VerifyError::TooLittleVotingPower { voting_power, .. }) => {
+                VoteReceptionResult::VoteAdded(voting_power)
+            }
+            Err(error) => {
+                error!("MUST_FIX: vote received could not be added: {}", error);
+                VoteReceptionResult::ErrorAddingVote(error)
+            }
+        }
+    }
+
+
+    /// Check whether the newly inserted vote completes a QC
     fn aggregate_qc(
         &mut self,
         vote: &Vote,
@@ -94,6 +131,7 @@ impl PendingVotes {
         // Note that the digest covers the ledger info information, which is also indirectly
         // covering vote data hash (in its `consensus_data_hash` field).
         let li_digest = vote.ledger_info().hash();
+
         let li_with_sig = self.li_digest_to_votes.entry(li_digest).or_insert_with(|| {
             LedgerInfoWithSignatures::new(vote.ledger_info().clone(), BTreeMap::new())
         });
@@ -137,8 +175,8 @@ impl PendingVotes {
         }
     }
 
-    /// If this is the first vote from Author, add it to map. If Author has
-   /// already voted on same block then return DuplicateVote error. If Author has already voted
+    /// If this is the first vote from Author, add it to map. If PubKey has
+   /// already voted on same block then return DuplicateVote error. If PubKey has already voted
    /// on some other result, prune the last vote and insert new one in map.
     fn replace_prev_vote_twins(
         &mut self,
@@ -146,13 +184,29 @@ impl PendingVotes {
         validator_verifier: &ValidatorVerifier,) -> Result<(), VoteReceptionResult> {
         let author = vote.author();
         let round = vote.vote_data().proposed().round();
+
         let li_digest = vote.ledger_info().hash();
+        // Get hash of the block, rather than ledger_info
+        //let vote_block_id = vote.ledger_info().commit_info().id();
+
+
         let is_timeout = vote.is_timeout();
+
         let vote_info = LastVoteInfo {
             li_digest,
             round,
             is_timeout,
         };
+
+        /*
+        let vote_info = LastVoteInfo {
+            li_digest: vote_block_id,
+            round,
+            is_timeout,
+        };
+        */
+
+        /*
         let last_voted_info = match self.author_to_last_voted_info.insert(author, vote_info) {
             None => {
                 // First vote from Author, do nothing.
@@ -161,30 +215,63 @@ impl PendingVotes {
             // Repeat vote from the same Author, then get VoteInfo for previous vote
             Some(last_voted_info) => last_voted_info,
         };
+        */
 
-        // If the repeat vote is for the same block then we return
+        let node_pubkey = validator_verifier.get_public_key(&author).unwrap();
+        let (last_voted_info, last_author) = match self.key_to_last_voted_info.insert(node_pubkey, (vote_info, author)) {
+            None => {
+                // First vote from PubKey, do nothing.
+                return Ok(());
+            }
+            // Repeat vote from the same PubKey, then get VoteInfo for previous vote
+            // Note that previous VoteInfo could have been from a node or its twin,
+            // they have the same PubKeys, so we treat them as the same
+            Some((last_voted_info, last_author)) => (last_voted_info, last_author),
+        };
+
+        debug!("======= Key to (VoteInfo, Author) ======");
+        for (key, val) in self.key_to_last_voted_info.iter() {
+            debug!("Author: {:?}, PubKey: {:?}, LIDigest: {:?}", val.1.short_str(), key, val.0.li_digest);
+        }
+        debug!("=========================");
+
+        // For compatibility VoteInfo still has li_digest, but we actually store
+        // last vote block id in it
+        //let last_vote_block_id = last_voted_info.li_digest;
+
+        // The code below executed only if the repeat vote is for the same block
         if li_digest == last_voted_info.li_digest {
+        //if last_vote_block_id == vote_block_id {
             // If it's a timeout vote, return Error
             if is_timeout == last_voted_info.is_timeout {
-                // Author has already voted for the very same LedgerInfo
+                // PubKey has already voted for the very same LedgerInfo
                 return Err(VoteReceptionResult::DuplicateVote);
             }
             // If it's a regular vote (not timeout) then return Ok
             else {
-                // Author has already voted for this LedgerInfo, but this time the Vote's
+                // PubKey has already voted for this LedgerInfo, but this time the Vote's
                 // round signature is different.
                 // Do not replace the prev vote, try to may be gather a TC.
-                return Ok(());
+                // Bano: !!!
+                debug!("========================");
+                debug!("[SAME BLOCKS] Duplicate vote! Last author {:?} New Author: {:?}", last_author.short_str(), author.short_str());
+                debug!("========================");
+                //return Ok(());
+                return Err(VoteReceptionResult::DuplicateVote);
             }
         }
 
         // The code below executed only if the repeat vote is for a new block
 
+        debug!("============================");
+        debug!("[DIFFERENT BLOCKS] Duplicate vote! Last author {:?} New Author: {:?}", last_author.short_str(), author.short_str());
+        debug!("============================");
+
         // Prune last pending vote from the pending votes.
         if let Some(li_pending_votes) = self.li_digest_to_votes.get_mut(&last_voted_info.li_digest)
         {
             // Removing signature from last voted block
-            li_pending_votes.remove_signature(author);
+            li_pending_votes.remove_signature(last_author);
             if li_pending_votes.signatures().is_empty() {
                 // Last vote for that LI digest, remove the digest entry
                 self.li_digest_to_votes.remove(&last_voted_info.li_digest);
@@ -193,18 +280,19 @@ impl PendingVotes {
 
         // Prune last pending vote from the pending timeout certificates.
         if round == last_voted_info.round {
-            // The same author has already sent a vote for this round but a different LedgerInfo
+            // The same PubKey has already sent a vote for this round but a different LedgerInfo
             // digest: this is not a valid behavior.
             error!(
-                "Validator {} sent two different votes for the same round {}!",
+                "Validator {} and {} sent two different votes for the same round {}!",
                 author.short_str(),
+                last_author.short_str(),
                 round
             );
             return Err(VoteReceptionResult::EquivocateVote);
         }
         if let Some(pending_tc) = self.round_to_tc.get_mut(&last_voted_info.round) {
             // Removing signature from last tc
-            pending_tc.remove_signature(author);
+            pending_tc.remove_signature(last_author);
             if pending_tc.signatures().is_empty() {
                 // Last vote for that round, remove the TC
                 self.round_to_tc.remove(&last_voted_info.round);
@@ -220,7 +308,9 @@ impl PendingVotes {
     fn replace_prev_vote(&mut self, vote: &Vote) -> Result<(), VoteReceptionResult> {
         let author = vote.author();
         let round = vote.vote_data().proposed().round();
+
         let li_digest = vote.ledger_info().hash();
+
         let is_timeout = vote.is_timeout();
         let vote_info = LastVoteInfo {
             li_digest,
@@ -252,7 +342,6 @@ impl PendingVotes {
             }
         }
 
-        // The code below executed only if the repeat vote is for a new block
 
         // Prune last pending vote from the pending votes.
         if let Some(li_pending_votes) = self.li_digest_to_votes.get_mut(&last_voted_info.li_digest)
