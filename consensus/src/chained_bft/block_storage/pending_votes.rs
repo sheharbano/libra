@@ -151,20 +151,27 @@ impl PendingVotes {
                 // First vote from Author, do nothing.
                 return Ok(());
             }
+            // Repeat vote from the same Author, then get VoteInfo for previous vote
             Some(last_voted_info) => last_voted_info,
         };
 
+        // If the repeat vote is for the same block then we return
         if li_digest == last_voted_info.li_digest {
+            // If it's a timeout vote, return Error
             if is_timeout == last_voted_info.is_timeout {
                 // Author has already voted for the very same LedgerInfo
                 return Err(VoteReceptionResult::DuplicateVote);
-            } else {
+            }
+            // If it's a regular vote (not timeout) then return Ok
+            else {
                 // Author has already voted for this LedgerInfo, but this time the Vote's
                 // round signature is different.
                 // Do not replace the prev vote, try to may be gather a TC.
                 return Ok(());
             }
         }
+
+        // The code below executed only if the repeat vote is for a new block
 
         // Prune last pending vote from the pending votes.
         if let Some(li_pending_votes) = self.li_digest_to_votes.get_mut(&last_voted_info.li_digest)
