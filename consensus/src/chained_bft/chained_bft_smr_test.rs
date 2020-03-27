@@ -1433,8 +1433,8 @@ fn twins_vote_dedup_test() {
         round_partitions.insert(
             round,
             vec![
-                vec![n0.clone(), n1.clone()],
-                vec![n2.clone(), n3.clone(), twin0.clone()],
+                vec![n0.clone(), n1.clone(), twin0.clone()],
+                vec![n2.clone(), n3.clone()],
             ],
         );
     }
