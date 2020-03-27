@@ -8,7 +8,8 @@ use consensus_types::{
     timeout_certificate::TimeoutCertificate,
     vote::Vote,
 };
-use libra_crypto::{hash::CryptoHash, HashValue};
+use libra_crypto::{hash::CryptoHash, HashValue, ed25519::Ed25519PublicKey};
+
 use libra_logger::prelude::*;
 use libra_types::{
     ledger_info::LedgerInfoWithSignatures,
@@ -48,6 +49,8 @@ pub struct PendingVotes {
     /// Map of Author to last vote info. Any pending vote from Author is cleaned up
     /// whenever a new vote is added by same Author
     author_to_last_voted_info: HashMap<Author, LastVoteInfo>,
+    ///Map of PublicKey to last vote info.
+    key_to_last_voted_info: HashMap<Ed25519PublicKey, LastVoteInfo>,
 }
 
 impl PendingVotes {
@@ -56,6 +59,7 @@ impl PendingVotes {
             li_digest_to_votes: HashMap::new(),
             round_to_tc: HashMap::new(),
             author_to_last_voted_info: HashMap::new(),
+            key_to_last_voted_info: HashMap::new(),
         }
     }
 
@@ -66,7 +70,7 @@ impl PendingVotes {
         vote: &Vote,
         validator_verifier: &ValidatorVerifier,
     ) -> VoteReceptionResult {
-        if let Err(e) = self.replace_prev_vote(vote) {
+        if let Err(e) = self.replace_prev_vote_twins(vote, &validator_verifier) {
             return e;
         }
         let vote_aggr_res = self.aggregate_qc(vote, validator_verifier);
@@ -131,6 +135,83 @@ impl PendingVotes {
             Err(VerifyError::TooLittleVotingPower { .. }) => None,
             _ => panic!("Unexpected verification error, vote = {}", vote),
         }
+    }
+
+    /// If this is the first vote from Author, add it to map. If Author has
+   /// already voted on same block then return DuplicateVote error. If Author has already voted
+   /// on some other result, prune the last vote and insert new one in map.
+    fn replace_prev_vote_twins(
+        &mut self,
+        vote: &Vote,
+        validator_verifier: &ValidatorVerifier,) -> Result<(), VoteReceptionResult> {
+        let author = vote.author();
+        let round = vote.vote_data().proposed().round();
+        let li_digest = vote.ledger_info().hash();
+        let is_timeout = vote.is_timeout();
+        let vote_info = LastVoteInfo {
+            li_digest,
+            round,
+            is_timeout,
+        };
+        let last_voted_info = match self.author_to_last_voted_info.insert(author, vote_info) {
+            None => {
+                // First vote from Author, do nothing.
+                return Ok(());
+            }
+            // Repeat vote from the same Author, then get VoteInfo for previous vote
+            Some(last_voted_info) => last_voted_info,
+        };
+
+        // If the repeat vote is for the same block then we return
+        if li_digest == last_voted_info.li_digest {
+            // If it's a timeout vote, return Error
+            if is_timeout == last_voted_info.is_timeout {
+                // Author has already voted for the very same LedgerInfo
+                return Err(VoteReceptionResult::DuplicateVote);
+            }
+            // If it's a regular vote (not timeout) then return Ok
+            else {
+                // Author has already voted for this LedgerInfo, but this time the Vote's
+                // round signature is different.
+                // Do not replace the prev vote, try to may be gather a TC.
+                return Ok(());
+            }
+        }
+
+        // The code below executed only if the repeat vote is for a new block
+
+        // Prune last pending vote from the pending votes.
+        if let Some(li_pending_votes) = self.li_digest_to_votes.get_mut(&last_voted_info.li_digest)
+        {
+            // Removing signature from last voted block
+            li_pending_votes.remove_signature(author);
+            if li_pending_votes.signatures().is_empty() {
+                // Last vote for that LI digest, remove the digest entry
+                self.li_digest_to_votes.remove(&last_voted_info.li_digest);
+            }
+        }
+
+        // Prune last pending vote from the pending timeout certificates.
+        if round == last_voted_info.round {
+            // The same author has already sent a vote for this round but a different LedgerInfo
+            // digest: this is not a valid behavior.
+            error!(
+                "Validator {} sent two different votes for the same round {}!",
+                author.short_str(),
+                round
+            );
+            return Err(VoteReceptionResult::EquivocateVote);
+        }
+        if let Some(pending_tc) = self.round_to_tc.get_mut(&last_voted_info.round) {
+            // Removing signature from last tc
+            pending_tc.remove_signature(author);
+            if pending_tc.signatures().is_empty() {
+                // Last vote for that round, remove the TC
+                self.round_to_tc.remove(&last_voted_info.round);
+            }
+        }
+
+        Ok(())
     }
 
     /// If this is the first vote from Author, add it to map. If Author has
