@@ -257,7 +257,8 @@ impl SMRNode {
                 let mut idx_to_authors = Vec::new();
 
                 for idx in vec_idx.iter() {
-                    idx_to_authors.push(validator_set[idx.to_owned()].account_address().clone());
+                    let author = nodes[idx.to_owned()].validator_network.as_ref().unwrap().peer_id;
+                    idx_to_authors.push(author);
                 }
 
                 twins_round_proposers.insert(round.to_owned(), idx_to_authors);
@@ -267,6 +268,7 @@ impl SMRNode {
                 each_node.set_round_to_proposers(twins_round_proposers.clone());
             }
         }
+
 
         // ====================
         // Start nodes
@@ -281,6 +283,7 @@ impl SMRNode {
             node_config.consensus.safety_rules = SafetyRulesConfig::default();
 
             let (_, storage) = MockStorage::start_for_testing(validator_set.clone());
+
             smr_nodes.push(Self::start(
                 playground,
                 node_config,
@@ -1391,9 +1394,9 @@ fn twins_vote_dedup_test() {
     // Will default to the first node, if no leader specified for given round
     let mut twins_round_proposers_idx: HashMap<Round, Vec<usize>> = HashMap::new();
 
-    // Make n0 and n2 leaders for round 1..29
-    for i in 1..30 {
-        twins_round_proposers_idx.insert(i, vec![0, 2]);
+    // Make n0 and n3 leaders for round 1..50
+    for i in 1..50 {
+        twins_round_proposers_idx.insert(i, vec![1,2]);
     }
 
     let mut nodes = SMRNode::start_num_nodes_with_twins(
@@ -1416,14 +1419,22 @@ fn twins_vote_dedup_test() {
         .smr.
         author();
 
+    debug!("Created nodes:\
+    \n n0 -> {:?},\
+    \n n1 -> {:?},\
+    \n n2 -> {:?},\
+    \n n3 -> {:?},\
+    \n twin0 -> {:?}", n0,n1,n2,n3,twin0);
+
+
     let mut round_partitions: HashMap<u64, Vec<Vec<AccountAddress>>> = HashMap::new();
 
     for round in 0..50 {
         round_partitions.insert(
             round,
             vec![
-                vec![n0.clone(), n1.clone(), twin0.clone()],
-                vec![n2.clone(), n3.clone()],
+                vec![n0.clone(), n1.clone()],
+                vec![n2.clone(), n3.clone(), twin0.clone()],
             ],
         );
     }
@@ -1439,7 +1450,7 @@ fn twins_vote_dedup_test() {
         // Pull enough votes to get a commit on the first block)
         // The proposer's votes are implicit and do not go in the queue.
         let _votes: Vec<VoteMsg> = playground
-            .wait_for_messages(20, NetworkPlayground::votes_only::<TestPayload>)
+            .wait_for_messages(50, NetworkPlayground::votes_only::<TestPayload>)
             .await
             .into_iter()
             .map(|(_, msg)| match msg {
