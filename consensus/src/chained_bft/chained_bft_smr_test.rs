@@ -1338,6 +1338,138 @@ fn twins_split_network_test() {
 }
 
 
+#[test]
+/// This test checks that the vote of a node and its twin
+/// should be counted as duplicate vote (because they have
+/// the same public keys)
+///
+/// Setup:
+///
+/// 4 honest nodes (n0, n1, n2, n3), and 1 twin (twin0)
+///
+/// Leader: For each round n0 and n2 are leaders
+///
+///
+/// We split the network as follows:
+///      partition 1: n0, n1, twin0
+///      partition 2: n2, n3
+///
+/// Test:
+///
+/// We need 3 nodes to form a quorum. None of the partitions
+/// should be able to form quorum. Partition 1 has 3 nodes
+/// but one of them is a twin, and its vote will be counted
+/// as duplicate of n0.
+///
+/// Run the test:
+/// cargo xtest -p consensus twins_vote_dedup_test -- --nocapture
+#[cfg(test)]
+fn twins_vote_dedup_test() {
+    let runtime = consensus_runtime();
+    let mut playground = NetworkPlayground::new(runtime.handle().clone());
+
+    let num_nodes = 4;
+
+    // Index #s of nodes (i.e. target nodes) for which we will create twins
+    let mut target_nodes = vec![];
+    target_nodes.push(0);
+
+    // This helps us map target nodes (for which we will create twins)
+    // to corresponding twin indices in 'nodes'. For example, we get
+    // twin for nodes[1] as follows:  nodes[node_to_twin.get(1)]
+    let mut node_to_twin: HashMap<usize, usize> = HashMap::new();
+    for (each, target) in target_nodes.iter().enumerate() {
+        let twin_index = num_nodes + each;
+        node_to_twin.insert(*target, twin_index);
+        debug!(
+            "[Twins] Will create Twin for node {0} at index {1}",
+            *target, twin_index
+        );
+    }
+
+    // Specify round leaders here
+    // Will default to the first node, if no leader specified for given round
+    let mut twins_round_proposers_idx: HashMap<Round, Vec<usize>> = HashMap::new();
+
+    // Make n0 and n2 leaders for round 1..29
+    for i in 1..30 {
+        twins_round_proposers_idx.insert(i, vec![0, 2]);
+    }
+
+    let mut nodes = SMRNode::start_num_nodes_with_twins(
+        /* num_nodes */ num_nodes,
+        &mut target_nodes,
+        &mut playground,
+        RoundProposers,
+        /* executor_with_reconfig */ false,
+        twins_round_proposers_idx,
+        &node_to_twin,
+    );
+
+    // 4 honest nodes
+    let n0 = &nodes[0].smr.author();
+    let n1 = &nodes[1].smr.author();
+    let n2 = &nodes[2].smr.author();
+    let n3 = &nodes[3].smr.author();
+    // twin of n0
+    let twin0 = &nodes[node_to_twin.get(&0).unwrap().to_owned()]
+        .smr.
+        author();
+
+    let mut round_partitions: HashMap<u64, Vec<Vec<AccountAddress>>> = HashMap::new();
+
+    for round in 0..50 {
+        round_partitions.insert(
+            round,
+            vec![
+                vec![n0.clone(), n1.clone(), twin0.clone()],
+                vec![n2.clone(), n3.clone()],
+            ],
+        );
+    }
+
+    playground.split_network_round(&round_partitions);
+
+    block_on(async move {
+
+        let _proposals = playground
+            .wait_for_messages(2, NetworkPlayground::proposals_only::<TestPayload>)
+            .await;
+
+        // Pull enough votes to get a commit on the first block)
+        // The proposer's votes are implicit and do not go in the queue.
+        let _votes: Vec<VoteMsg> = playground
+            .wait_for_messages(20, NetworkPlayground::votes_only::<TestPayload>)
+            .await
+            .into_iter()
+            .map(|(_, msg)| match msg {
+                ConsensusMsg::VoteMsg(vote_msg) => *vote_msg,
+                _ => panic!("Unexpected message found"),
+            })
+            .collect();
+
+        // =================
+        // Check that the commit logs for nodes in the two partitions
+        // are empty
+        // =================
+
+        let mut commit_seen = false;
+
+        for i in 0..nodes.len() {
+
+            nodes[i].commit_cb_receiver.close();
+
+            while let Ok(Some(node_commit)) = nodes[i].commit_cb_receiver.try_next() {
+                commit_seen = true;
+                break;
+            }
+        }
+
+        assert!(!commit_seen);
+    });
+}
+
+
 
 #[test]
 /// This test demonstrates safety violation with f+1 twins
