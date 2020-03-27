@@ -220,6 +220,7 @@ pub fn validator_swarm_twins(
         }
     }
 
+    /*
     // Some tests make assumptions about the ordering of configs in relation
     // to the FixedProposer which should be the first proposer in lexical order.
     // We apply the expected ordering only to non-twin nodes, because in spirit
@@ -229,8 +230,9 @@ pub fn validator_swarm_twins(
         let b_auth = b.validator_network.as_ref().unwrap().peer_id;
         a_auth.cmp(&b_auth)
     });
+    */
 
-    validator_keys.sort_by(|k1, k2| k1.account_address().cmp(k2.account_address()));
+    //validator_keys.sort_by(|k1, k2| k1.account_address().cmp(k2.account_address()));
 
 
     // ==============
