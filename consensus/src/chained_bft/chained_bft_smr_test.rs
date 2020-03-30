@@ -2176,9 +2176,9 @@ fn filter_n_elements<T: Clone> (
 /// time cargo xtest -p consensus twins_test_safety_attack_generator
 ///
 fn twins_test_safety_attack_generator() {
-    const NUM_OF_ROUNDS: usize = 4; // FIXME: Tweak this parameter
+    const NUM_OF_ROUNDS: usize = 7; // FIXME: Tweak this parameter
     const NUM_OF_NODES: usize = 4; // FIXME: Tweak this parameter
-    const NUM_OF_PARTITIONS: usize = 2; // FIXME: Tweak this parameter
+    const NUM_OF_PARTITIONS: usize = 3; // FIXME: Tweak this parameter
 
     // If true will not execute scenarios, just print stats
     const IS_DRY_RUN: bool = true; // FIXME: Tweak this parameter
@@ -2603,5 +2603,13 @@ fn twins_test_safety_attack_generator() {
         "\nFinished running total {:?} test cases for {:?} nodes, {:?} twins, \
          {:?} rounds and {:?} partitions\n",
         num_test_cases-1, NUM_OF_NODES, f, NUM_OF_ROUNDS, NUM_OF_PARTITIONS
+    );
+
+    let duration = start.elapsed();
+    let test_run = if IS_DRY_RUN { "generation" } else { "generation and execution" };
+    println!(
+        "The total time elapsed for the {:?} is: {:?} ms",
+        test_run,
+        duration.as_millis()
     );
 }
