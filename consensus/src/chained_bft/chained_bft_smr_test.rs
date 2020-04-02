@@ -2287,7 +2287,7 @@ fn twins_test_safety_attack_generator() {
     //     as 'static' and run for all the R rounds, rather than permuting the
     //     partition-scenario combinations across R rounds
 
-    const OPTION_TESTCASE_GENERATOR: usize = 2; // FIXME: Tweak this parameter
+    const OPTION_TESTCASE_GENERATOR: usize = 1; // FIXME: Tweak this parameter
 
 
 
@@ -2303,7 +2303,7 @@ fn twins_test_safety_attack_generator() {
     //     0: To simply select the first Z testcases (deterministic)
     //     1: To randomly pick *without replacement* Z testcases (probabilistic)
     //     2: To randomly pick *with replacement* Z testcases (probabilistic)
-    const FILTER_Z_TESTCASES: usize = 100; // FIXME: Tweak this parameter
+    const FILTER_Z_TESTCASES: usize = 0; // FIXME: Tweak this parameter
     const OPTION_FILTER_Z_TESTCASES: usize = 0; // FIXME: Tweak this parameter
 
 
