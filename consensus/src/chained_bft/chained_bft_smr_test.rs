@@ -2262,8 +2262,8 @@ fn twins_test_safety_attack_generator() {
     //     0: To simply select the first Y testcases (deterministic)
     //     1: To randomly pick *without replacement* Y testcases (probabilistic)
     //     2: To randomly pick *with replacement* Y testcases (probabilistic)
-    const FILTER_Y_PARTITIONS_WITH_LEADERS: usize = 2; // FIXME: Tweak this parameter
-    const OPTION_FILTER_Y_PARTITIONS_WITH_LEADERS: usize = 1; // FIXME: Tweak this parameter
+    const FILTER_Y_PARTITIONS_WITH_LEADERS: usize = 10; // FIXME: Tweak this parameter
+    const OPTION_FILTER_Y_PARTITIONS_WITH_LEADERS: usize = 2; // FIXME: Tweak this parameter
 
 
     // OPTION_TESTCASE_GENERATOR lets us choose how to distribute 'scenario-leaders'
@@ -2287,7 +2287,7 @@ fn twins_test_safety_attack_generator() {
     //     as 'static' and run for all the R rounds, rather than permuting the
     //     partition-scenario combinations across R rounds
 
-    const OPTION_TESTCASE_GENERATOR: usize = 1; // FIXME: Tweak this parameter
+    const OPTION_TESTCASE_GENERATOR: usize = 2; // FIXME: Tweak this parameter
 
 
 
@@ -2303,7 +2303,7 @@ fn twins_test_safety_attack_generator() {
     //     0: To simply select the first Z testcases (deterministic)
     //     1: To randomly pick *without replacement* Z testcases (probabilistic)
     //     2: To randomly pick *with replacement* Z testcases (probabilistic)
-    const FILTER_Z_TESTCASES: usize = 0; // FIXME: Tweak this parameter
+    const FILTER_Z_TESTCASES: usize = 100; // FIXME: Tweak this parameter
     const OPTION_FILTER_Z_TESTCASES: usize = 0; // FIXME: Tweak this parameter
 
 
@@ -2670,5 +2670,13 @@ fn twins_test_safety_attack_generator() {
          {:?} rounds and {:?} partitions\n",
         num_test_cases-1, NUM_OF_NODES, f, NUM_OF_ROUNDS, NUM_OF_PARTITIONS
 
+    );
+
+    let duration = start.elapsed();
+    let test_run = if IS_DRY_RUN { "generation" } else { "generation and execution" };
+    println!(
+        "The total time elapsed for the {:?} is: {:?} ms",
+        test_run,
+        duration.as_millis()
     );
 }
