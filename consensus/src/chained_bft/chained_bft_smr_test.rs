@@ -1595,8 +1595,10 @@ fn twins_safety_violation_test() {
             .collect();
 
         // =================
-        // Check if the commit logs across the two partitions match
+        // Check for all nodes if there are any conflicts in the commit logs
         // =================
+
+        debug!(">>>>> Getting node commit trees for safety check\n");
 
         let mut all_branches = vec![];
 
@@ -1604,18 +1606,37 @@ fn twins_safety_violation_test() {
 
             nodes[i].commit_cb_receiver.close();
 
+            // Node's commited blocks, in order of round numbers
             let mut node_commits = vec![];
-            // Some committed blocks appear multiple times in 'commit_cb_receiver',
-            // so need to remove redundant blocks
-            let mut seen = HashSet::new();
 
+            let mut map_node_commits = HashMap::new();
+            // Add (round, commited_block) to map. This will also take care of
+            // redundancy as some committed blocks appear multiple times in
+            // 'commit_cb_receiver',
+            let mut highest_round = 0;
             while let Ok(Some(node_commit)) = nodes[i].commit_cb_receiver.try_next() {
                 let node_commit_id = node_commit.ledger_info().consensus_block_id();
-                if !seen.contains(&node_commit_id) {
-                    node_commits.push(node_commit_id);
-                    seen.insert(node_commit_id);
+                let node_commit_round = node_commit.ledger_info().commit_info().round();
+
+                if node_commit_round > highest_round {
+                    highest_round = node_commit_round;
                 }
+                map_node_commits.insert(node_commit_round, node_commit_id);
             }
+
+            // Intialize node_commits with all zeroes.
+            // Each index represents (round-1). This is
+            // because round 0 is genesis and won't appear in
+            // commit_cb_receiver
+            for i in (0..highest_round){
+                node_commits.push(HashValue::zero());
+            }
+
+            for round in map_node_commits.keys().sorted() {
+                let idx = round.clone() as usize;
+                node_commits[idx - 1] = *map_node_commits.get(round).unwrap();
+            }
+
             all_branches.push(node_commits);
         }
 
@@ -1912,18 +1933,37 @@ fn execute_scenario(
 
         nodes[i].commit_cb_receiver.close();
 
+        // Node's commited blocks, in order of round numbers
         let mut node_commits = vec![];
-        // Some committed blocks appear multiple times in 'commit_cb_receiver',
-        // so need to remove redundant blocks
-        let mut seen = HashSet::new();
 
+        let mut map_node_commits = HashMap::new();
+        // Add (round, commited_block) to map. This will also take care of
+        // redundancy as some committed blocks appear multiple times in
+        // 'commit_cb_receiver',
+        let mut highest_round = 0;
         while let Ok(Some(node_commit)) = nodes[i].commit_cb_receiver.try_next() {
             let node_commit_id = node_commit.ledger_info().consensus_block_id();
-            if !seen.contains(&node_commit_id) {
-                node_commits.push(node_commit_id);
-                seen.insert(node_commit_id);
+            let node_commit_round = node_commit.ledger_info().commit_info().round();
+
+            if node_commit_round > highest_round {
+                highest_round = node_commit_round;
             }
+            map_node_commits.insert(node_commit_round, node_commit_id);
         }
+
+        // Intialize node_commits with all zeroes.
+        // Each index represents (round-1). This is
+        // because round 0 is genesis and won't appear in
+        // commit_cb_receiver
+        for i in (0..highest_round){
+            node_commits.push(HashValue::zero());
+        }
+
+        for round in map_node_commits.keys().sorted() {
+            let idx = round.clone() as usize;
+            node_commits[idx - 1] = *map_node_commits.get(round).unwrap();
+        }
+
         all_branches.push(node_commits);
     }
 
@@ -2181,7 +2221,7 @@ fn twins_test_safety_attack_generator() {
     const NUM_OF_PARTITIONS: usize = 2; // FIXME: Tweak this parameter
 
     // If true will not execute scenarios, just print stats
-    const IS_DRY_RUN: bool = true; // FIXME: Tweak this parameter
+    const IS_DRY_RUN: bool = false; // FIXME: Tweak this parameter
 
 
     // The parameters FILTER_X_PARTITIONS and OPTION_FILTER_X_PARTITIONS let
