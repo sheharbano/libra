@@ -52,8 +52,8 @@ def set_hosts(ctx, status='running', cred=credentials, filter=filter):
 
 @task
 def test(ctx):
-    ''' Test the connection with all hosts. If the command succeeds, it
-    prints "Hello, World!" for each host.
+    ''' Test the connection with all hosts. 
+    If the command succeeds, it prints "Hello, World!" for each host.
 
     COMMANDS:	fab test
     '''
@@ -77,7 +77,7 @@ def info(ctx):
 
 @task
 def start(ctx):
-    ''' Start instances.
+    ''' Start all instances.
 
     COMMANDS:	fab start
     '''
@@ -92,7 +92,7 @@ def start(ctx):
 
 @task
 def stop(ctx):
-    ''' Stop instances.
+    ''' Stop all instances.
 
     COMMANDS:	fab stop
     '''
@@ -119,8 +119,8 @@ def install(ctx):
         c.put(script, '.')
         c.run(f'chmod +x {script}')
 
-        # TODO: find a way to forgo the grub config prompt and run the setup
-        # script automatically.
+    # TODO: find a way to forgo the grub config prompt and run the setup
+    # script automatically.
     print(f'The script "{script}"" is now uploaded on every machine;'
           'Run it manually and pay attention to the APT grub config prompt.')
 
@@ -143,7 +143,7 @@ def run(ctx):
     COMMANDS:	fab run
     '''
     script = 'twins-aws-run.sh'
-    runs = '5'
+    runs = '10'
 
     set_hosts(ctx)
 
@@ -156,3 +156,19 @@ def run(ctx):
     # Run script on all machines in parallel
     g = Group(*ctx.hosts, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
     g.run(f'screen -d -m ./{script} {runs}')
+
+
+@task
+def logs(ctx):
+    ''' Prints the names of the log files. 
+    It gives an idea of the progress of the execution.
+
+    COMMANDS:	fab status
+    '''
+
+    set_hosts(ctx)
+    for host in ctx.hosts:
+        c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
+        print(f'Host: {host}')
+        c.run('ls logs/')
+        print()
