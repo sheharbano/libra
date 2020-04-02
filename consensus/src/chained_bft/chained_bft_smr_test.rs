@@ -46,6 +46,7 @@ use rand::Rng;
 use libra_logger::prelude::*;
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
+use libra_logger::Level;
 
 /// Auxiliary struct that is preparing SMR for the test
 struct SMRNode {
@@ -2217,7 +2218,7 @@ fn filter_n_elements<T: Clone> (
 /// time cargo xtest -p consensus twins_test_safety_attack_generator
 ///
 fn twins_test_safety_attack_generator() {
-    const NUM_OF_ROUNDS: usize = 4; // FIXME: Tweak this parameter
+    const NUM_OF_ROUNDS: usize = 7; // FIXME: Tweak this parameter
     const NUM_OF_NODES: usize = 4; // FIXME: Tweak this parameter
     const NUM_OF_PARTITIONS: usize = 2; // FIXME: Tweak this parameter
 
@@ -2248,6 +2249,8 @@ fn twins_test_safety_attack_generator() {
     //
     // FILTER_Y_PARTITIONS_WITH_LEADERS: Indicates how many 'scenario-leader'
     // combinations to pick; setting this parameter to 0 disables this filter.
+    // If the value of this parameter is greater than the total 'scenario-leader'
+    // combinations, nothing if filtered.
     //
     // OPTION_FILTER_Y_PARTITIONS_WITH_LEADERS: Indicates how to select those Y
     // samples; it can take the following values:
@@ -2255,7 +2258,7 @@ fn twins_test_safety_attack_generator() {
     //     1: To randomly pick *without replacement* Y testcases (probabilistic)
     //     2: To randomly pick *with replacement* Y testcases (probabilistic)
     const FILTER_Y_PARTITIONS_WITH_LEADERS: usize = 2; // FIXME: Tweak this parameter
-    const OPTION_FILTER_Y_PARTITIONS_WITH_LEADERS: usize = 0; // FIXME: Tweak this parameter
+    const OPTION_FILTER_Y_PARTITIONS_WITH_LEADERS: usize = 1; // FIXME: Tweak this parameter
 
 
     // OPTION_TESTCASE_GENERATOR lets us choose how to distribute 'scenario-leaders'
@@ -2274,6 +2277,11 @@ fn twins_test_safety_attack_generator() {
     //     round a 'scenario-leader' combination that is randomly picked *with
     //     replacement* from all possible 'scenario-leaders'; it keeps picking them
     //     until it generated a total of 1,000 testcases.
+    //
+    //     3: In this mode, each of the partition-scenario combination is treated
+    //     as 'static' and run for all the R rounds, rather than permuting the
+    //     partition-scenario combinations across R rounds
+
     const OPTION_TESTCASE_GENERATOR: usize = 1; // FIXME: Tweak this parameter
 
 
@@ -2293,6 +2301,8 @@ fn twins_test_safety_attack_generator() {
     const FILTER_Z_TESTCASES: usize = 0; // FIXME: Tweak this parameter
     const OPTION_FILTER_Z_TESTCASES: usize = 0; // FIXME: Tweak this parameter
 
+
+    ::libra_logger::Logger::new().level(Level::Debug).init();
 
     let start = Instant::now();
 
@@ -2371,7 +2381,7 @@ fn twins_test_safety_attack_generator() {
     println!(
         "There are {:?} ways to allocate {:?} nodes ({:?} honest nodes + {:?} twins) \
         into {:?} partitions.",
-        partition_scenarios.len(), nodes.len(), NUM_OF_NODES-f, f, NUM_OF_PARTITIONS
+        partition_scenarios.len(), nodes.len(), NUM_OF_NODES, f, NUM_OF_PARTITIONS
     );
 
     if FILTER_X_PARTITIONS != 0 {
@@ -2449,11 +2459,6 @@ fn twins_test_safety_attack_generator() {
         partition_scenarios_with_leaders.len()
     );
 
-    // =============================================
-    // We now have all possible partition-leader scenarios. Next we
-    // find how to arrange these scenarios across NUM_OF_ROUNDS rounds.
-    // =============================================
-
     if FILTER_Y_PARTITIONS_WITH_LEADERS != 0 {
         assert!(FILTER_Y_PARTITIONS_WITH_LEADERS > 0);
         old_list_length = partition_scenarios_with_leaders.len();
@@ -2469,6 +2474,11 @@ fn twins_test_safety_attack_generator() {
             old_list_length - partition_scenarios_with_leaders.len()
         );
     }
+
+    // =============================================
+    // We now have all possible partition-leader scenarios. Next we
+    // find how to arrange these scenarios across NUM_OF_ROUNDS rounds.
+    // =============================================
 
     // Permutation of n objects into r places, P(n,r) requires that n >= r.
     // Informally, number of rounds should be less than scenarios, otherwise
@@ -2504,27 +2514,27 @@ fn twins_test_safety_attack_generator() {
 
         if NUM_OF_ROUNDS == 4 {
             for (i1, i2, i3, i4) in iproduct!(0..length, 0..length, 0..length, 0..length) {
-               let mut each_test = Vec::new();
-               each_test.push(&partition_scenarios_with_leaders[i1]);
-               each_test.push(&partition_scenarios_with_leaders[i2]);
-               each_test.push(&partition_scenarios_with_leaders[i3]);
-               each_test.push(&partition_scenarios_with_leaders[i4]);
-               test_cases.push(each_test);
+                let mut each_test = Vec::new();
+                each_test.push(&partition_scenarios_with_leaders[i1]);
+                each_test.push(&partition_scenarios_with_leaders[i2]);
+                each_test.push(&partition_scenarios_with_leaders[i3]);
+                each_test.push(&partition_scenarios_with_leaders[i4]);
+                test_cases.push(each_test);
             }
         }
         else if NUM_OF_ROUNDS == 7 {
             for (i1, i2, i3, i4, i5, i6, i7) in iproduct!(
                 0..length, 0..length, 0..length, 0..length, 0..length, 0..length, 0..length
             ) {
-               let mut each_test = Vec::new();
-               each_test.push(&partition_scenarios_with_leaders[i1]);
-               each_test.push(&partition_scenarios_with_leaders[i2]);
-               each_test.push(&partition_scenarios_with_leaders[i3]);
-               each_test.push(&partition_scenarios_with_leaders[i4]);
-               each_test.push(&partition_scenarios_with_leaders[i5]);
-               each_test.push(&partition_scenarios_with_leaders[i6]);
-               each_test.push(&partition_scenarios_with_leaders[i7]);
-               test_cases.push(each_test);
+                let mut each_test = Vec::new();
+                each_test.push(&partition_scenarios_with_leaders[i1]);
+                each_test.push(&partition_scenarios_with_leaders[i2]);
+                each_test.push(&partition_scenarios_with_leaders[i3]);
+                each_test.push(&partition_scenarios_with_leaders[i4]);
+                each_test.push(&partition_scenarios_with_leaders[i5]);
+                each_test.push(&partition_scenarios_with_leaders[i6]);
+                each_test.push(&partition_scenarios_with_leaders[i7]);
+                test_cases.push(each_test);
             }
         }
         else {
@@ -2560,12 +2570,23 @@ fn twins_test_safety_attack_generator() {
             test_cases.push(each_test);
         }
     }
+    else if OPTION_TESTCASE_GENERATOR == 3 {
+        for partition_scenario_with_leader in partition_scenarios_with_leaders.iter() {
+            let mut each_test = Vec::new();
+            // The same partition_scenario_with_leader for all rounds
+            for j in 0..NUM_OF_ROUNDS {
+                each_test.push(partition_scenario_with_leader);
+            }
+            test_cases.push(each_test);
+        }
+
+    }
     else {
         println!("{:?} is an invalid OPTION_TESTCASE_GENERATOR", OPTION_TESTCASE_GENERATOR);
         assert!(false)
     }
 
-    println!("We have generated {:?} testcases.", test_cases.len());
+    debug!("We have generated {:?} testcases.", test_cases.len());
     if FILTER_Z_TESTCASES != 0 {
         assert!(FILTER_Z_TESTCASES > 0);
         old_list_length = test_cases.len();
@@ -2586,63 +2607,63 @@ fn twins_test_safety_attack_generator() {
     // Now we are ready to prepare and execute each scenario via the executor
     // =============================================
 
-    let mut round = 1;
     let mut num_test_cases = 1;
 
     for each_test in test_cases {
-
-        if num_test_cases > 0 {
-            if (!IS_DRY_RUN) {
-                println!("=====================================");
-                println!("TEST CASE {:?}:  {:?}", num_test_cases, &each_test);
-                println!("=====================================");
-            }
-
-            // Creating data structures that specify round-by-round network partitions
-            // and leaders
-            //
-            // Maps round to partitions (nodes are expressed in terms of their indices)
-            let mut round_partitions_idx = HashMap::new();
-            // Maps round to leaders (nodes are expressed in terms of their indices)
-            let mut twins_round_proposers_idx = HashMap::new();
-            for round_scenario in each_test {
-                let leader = round_scenario.0.clone();
-                let scenario = round_scenario.1.clone();
-                let mut leaders = Vec::new();
-                leaders.push(leader.clone());
-                // If a target node is leader, make its twin the leader too
-                if target_nodes.contains(&leader) {
-                    let twin_node = node_to_twin.get(&leader).unwrap().clone();
-                    leaders.push(twin_node.clone());
-                }
-                twins_round_proposers_idx.insert(round, leaders);
-                round_partitions_idx.insert(round, scenario);
-                round += 1;
-            }
-
-            if (!IS_DRY_RUN) {
-                let start_execution = Instant::now();
-                execute_scenario(
-                    NUM_OF_NODES,
-                    &target_nodes,
-                    &node_to_twin,
-                    round_partitions_idx,      // this changes for each test
-                    twins_round_proposers_idx, // this changes for each test
-                    true,
-                );
-                let execution_duration = start_execution.elapsed();
-                println!(
-                    "Time elapsed for execution only is: {:?} ms",
-                    execution_duration.as_millis()
-                );
-            }
-            num_test_cases += 1;
+        if (!IS_DRY_RUN) {
+            debug!("=====================================");
+            debug!("TEST CASE {:?}:  {:?}", num_test_cases, &each_test);
+            debug!("=====================================");
         }
+
+        // Creating data structures that specify round-by-round network partitions
+        // and leaders
+        //
+        // Maps round to partitions (nodes are expressed in terms of their indices)
+        let mut round_partitions_idx = HashMap::new();
+        // Maps round to leaders (nodes are expressed in terms of their indices)
+        let mut twins_round_proposers_idx = HashMap::new();
+        let mut round = 0;
+        for round_scenario in each_test {
+            let leader = round_scenario.0.clone();
+            let scenario = round_scenario.1.clone();
+            let mut leaders = Vec::new();
+            leaders.push(leader.clone());
+            // If a target node is leader, make its twin the leader too
+            if target_nodes.contains(&leader) {
+                let twin_node = node_to_twin.get(&leader).unwrap().clone();
+                leaders.push(twin_node.clone());
+            }
+            twins_round_proposers_idx.insert(round, leaders);
+            round_partitions_idx.insert(round, scenario);
+            round += 1;
+        }
+
+        if (!IS_DRY_RUN) {
+            let start_execution = Instant::now();
+            execute_scenario(
+                NUM_OF_NODES,
+                &target_nodes,
+                &node_to_twin,
+                round_partitions_idx,      // this changes for each test
+                twins_round_proposers_idx, // this changes for each test
+                false, // we want the tests to continue even after finding safety
+                // issue. We will look at all safety issues in post-analysis
+            );
+            let execution_duration = start_execution.elapsed();
+            println!(
+                "Time elapsed for execution only is: {:?} ms",
+                execution_duration.as_millis()
+            );
+        }
+
+        num_test_cases += 1;
     }
 
     println!(
         "\nFinished running total {:?} test cases for {:?} nodes, {:?} twins, \
          {:?} rounds and {:?} partitions\n",
         num_test_cases-1, NUM_OF_NODES, f, NUM_OF_ROUNDS, NUM_OF_PARTITIONS
+
     );
 }
