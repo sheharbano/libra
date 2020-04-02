@@ -1909,10 +1909,15 @@ fn execute_scenario(
             .wait_for_messages(2, NetworkPlayground::proposals_only::<TestPayload>)
             .await;
 
+        let total_nodes = num_nodes + target_nodes.len();
+        // letting the nodes vote for 4x extra vote-rounds to discount slow partitions
+        // due to a high timeout
+        let num_votes = (total_nodes * num_of_rounds) + (3 * total_nodes);
+
         // Pull enough votes to get a commit on the first block)
         // The proposer's votes are implicit and do not go in the queue.
         let _votes: Vec<VoteMsg> = playground
-            .wait_for_messages(num_nodes * num_of_rounds, NetworkPlayground::votes_only::<TestPayload>)
+            .wait_for_messages(num_votes, NetworkPlayground::votes_only::<TestPayload>)
             .await
             .into_iter()
             .map(|(_, msg)| match msg {
