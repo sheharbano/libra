@@ -2178,10 +2178,10 @@ fn filter_n_elements<T: Clone> (
 fn twins_test_safety_attack_generator() {
     const NUM_OF_ROUNDS: usize = 7; // FIXME: Tweak this parameter
     const NUM_OF_NODES: usize = 4; // FIXME: Tweak this parameter
-    const NUM_OF_PARTITIONS: usize = 3; // FIXME: Tweak this parameter
+    const NUM_OF_PARTITIONS: usize = 2; // FIXME: Tweak this parameter
 
     // If true will not execute scenarios, just print stats
-    const IS_DRY_RUN: bool = true; // FIXME: Tweak this parameter
+    const IS_DRY_RUN: bool = false; // FIXME: Tweak this parameter
 
 
     // The parameters FILTER_X_PARTITIONS and OPTION_FILTER_X_PARTITIONS let
@@ -2213,8 +2213,8 @@ fn twins_test_safety_attack_generator() {
     //     0: To simply select the first Y testcases (deterministic)
     //     1: To randomly pick *without replacement* Y testcases (probabilistic)
     //     2: To randomly pick *with replacement* Y testcases (probabilistic)
-    const FILTER_Y_PARTITIONS_WITH_LEADERS: usize = 2; // FIXME: Tweak this parameter
-    const OPTION_FILTER_Y_PARTITIONS_WITH_LEADERS: usize = 0; // FIXME: Tweak this parameter
+    const FILTER_Y_PARTITIONS_WITH_LEADERS: usize = 10; // FIXME: Tweak this parameter
+    const OPTION_FILTER_Y_PARTITIONS_WITH_LEADERS: usize = 2; // FIXME: Tweak this parameter
 
 
     // OPTION_TESTCASE_GENERATOR lets us choose how to distribute 'scenario-leaders'
@@ -2233,7 +2233,7 @@ fn twins_test_safety_attack_generator() {
     //     round a 'scenario-leader' combination that is randomly picked *with
     //     replacement* from all possible 'scenario-leaders'; it keeps picking them
     //     until it generated a total of 1,000 testcases.
-    const OPTION_TESTCASE_GENERATOR: usize = 1; // FIXME: Tweak this parameter
+    const OPTION_TESTCASE_GENERATOR: usize = 2; // FIXME: Tweak this parameter
 
 
 
@@ -2249,7 +2249,7 @@ fn twins_test_safety_attack_generator() {
     //     0: To simply select the first Z testcases (deterministic)
     //     1: To randomly pick *without replacement* Z testcases (probabilistic)
     //     2: To randomly pick *with replacement* Z testcases (probabilistic)
-    const FILTER_Z_TESTCASES: usize = 0; // FIXME: Tweak this parameter
+    const FILTER_Z_TESTCASES: usize = 100; // FIXME: Tweak this parameter
     const OPTION_FILTER_Z_TESTCASES: usize = 0; // FIXME: Tweak this parameter
 
 
