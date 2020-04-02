@@ -1750,10 +1750,10 @@ fn is_safe(branches: Vec<Vec<HashValue>>) -> bool {
 
 // This function compares vectors (of possibly different lengths) at each index
 //
-// The vectors are equal if they match at each *available* index
+// The vectors are equal if they match at each *available* (i.e. non-zero) index
 //
 // There is a conflict at index i if the value at index i is different
-//          (or absent) at any of the the vectors. Values at conflicting index
+//          at any of the the vectors. Values at conflicting index
 //          will be printed out
 fn compare_vectors(vecs: &Vec<Vec<HashValue>>) -> bool {
 
@@ -1770,23 +1770,24 @@ fn compare_vectors(vecs: &Vec<Vec<HashValue>>) -> bool {
         // in the vectors to be compared
         for vec in vecs.iter() {
             // Only compare if the index being compared exists
-            // (because some vectors might be shorter than the longest)
+            // (because some vectors might be shorter than the longest),
             if i < vec.len() {
-                // If this is the first time comparing
-                if first_time {
-                    //val = vec[i].id();
-                    val = vec[i];
-                    first_time = false;
-                }
-                // If there's a different val at this index than the one
-                // at the previous vector
-                //if !val.eq(&vec[i].id()) {
-                if !val.eq(&vec[i]) {
-                    // then print the conflicting index at all vectors,
-                    print_conflict(vecs, i);
-                    is_conflict = true;
-                    // and move on to the next index
-                    break;
+                // and has a non-zero value at the index
+                if !vec[i].eq(&HashValue::zero()) {
+                    // If this is the first time comparing
+                    if first_time {
+                        val = vec[i];
+                        first_time = false;
+                    }
+                    // If there's a different val at this index than the one
+                    // at the previous vector
+                    if !val.eq(&vec[i]) {
+                        // then print the conflicting index at all vectors,
+                        print_conflict(vecs, i);
+                        is_conflict = true;
+                        // and move on to the next index
+                        break;
+                    }
                 }
             }
         }
