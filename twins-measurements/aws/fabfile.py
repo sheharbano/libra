@@ -98,6 +98,9 @@ def stop(ctx):
     '''
     set_hosts(ctx, status='running')
     ids = [instance.id for instance in ctx.instances]
+    if not ids:
+        print('There are no instances to stop.')
+        return
     response = ec2.stop_instances(InstanceIds=ids, DryRun=False)
     print(response)
 
