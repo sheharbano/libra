@@ -1132,7 +1132,7 @@ fn reconfiguration_test() {
 /// Check that the QC of n0 and twin0 matches
 ///
 /// Run the test:
-/// cargo xtest -p consensus twins_QC_test -- --nocapture
+/// cargo xtest -p consensus twins_qc_test -- --nocapture
 fn twins_qc_test() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
