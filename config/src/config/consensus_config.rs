@@ -30,7 +30,9 @@ impl Default for ConsensusConfig {
             proposer_type: ConsensusProposerType::MultipleOrderedProposers,
             contiguous_rounds: 2,
             max_pruned_blocks_in_mem: 10000,
-            pacemaker_initial_timeout_ms: 1000,
+            // Bano: Change timeout to 100 ms
+            //pacemaker_initial_timeout_ms: 1000,
+            pacemaker_initial_timeout_ms: 100,
             safety_rules: SafetyRulesConfig::default(),
             round_to_proposers: None::<HashMap<u64, Vec<AccountAddress>>>
         }
