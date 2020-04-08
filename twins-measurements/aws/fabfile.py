@@ -112,13 +112,16 @@ def install(ctx):
 
     COMMANDS:	fab install
     '''
-    script = 'twins-aws-setup.sh'
+    setup_script = 'twins-aws-setup.sh'
+    restart_stalled_script = 'twins-aws-restart-stalled.sh'
 
     set_hosts(ctx)
     for host in ctx.hosts:
         c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
-        c.put(script, '.')
-        c.run(f'chmod +x {script}')
+        c.put(restart_stalled_script, '.')
+        c.run(f'chmod +x {restart_stalled_script}')
+        c.put(setup_script, '.')
+        c.run(f'chmod +x {setup_script}')
 
     # TODO: find a way to forgo the grub config prompt and run the setup
     # script automatically.
@@ -146,12 +149,19 @@ def upload(ctx):
     files = glob.glob('./testcases/*.bin')
 
     set_hosts(ctx)
-    for host in ctx.hosts:
+
+    # Split testcases (equally) amongst hosts.
+    host_files = [[] for _ in ctx.hosts]
+    for i, f in enumerate(files):
+        host_files[i % len(ctx.hosts)].append(files[i])
+
+    # Upload testcases to each host.
+    for i, host in enumerate(ctx.hosts):
         c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
         c.run('mkdir -p testcases')
-        for f in files:
-            print(f'Uploading {f}...')
-            c.put(f, './testcases')
+        print(f'[{i}/{len(ctx.hosts)}] Uploading files to {host} ...')
+        for file in host_files[i]:
+            c.put(file, './testcases')
 
 
 @task
@@ -167,24 +177,23 @@ def run(ctx):
     CONFIG = 0
     RUNS = '10'  # Only used if CONFIG = 1.
 
-    if CONFIG == 0:
-        script = 'twins-aws-run-exhaustive.sh'
-    elif CONFIG == 1:
-        script = 'twins-aws-run-random.sh'
-    else:
-        assert False
+    run_script = 'twins-aws-run.sh'
+    restart_stalled_script = 'twins-aws-restart-stalled.sh'
 
     set_hosts(ctx)
+    job = f'*/5 * * * * ./{restart_stalled_script}'  # Contab job.
 
     # Upload / update script
     for host in ctx.hosts:
         c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
         c.put(script, '.')
-        c.run(f'chmod +x {script}')
+        c.run(f'chmod +x {run_script}')
+        c.run('crontab -r')
+        c.run(f'(crontab -l 2>/dev/null; echo "{job} -with args") | crontab -')
 
     # Run script on all machines in parallel
     g = Group(*ctx.hosts, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
-    g.run(f'screen -d -m ./{script} {RUNS}')
+    g.run(f'tmux new-session -d -s "twins" ./{run_script} {CONFIG} {RUNS}')
 
 
 @task

@@ -2346,7 +2346,7 @@ fn execute_testcases_from_file() {
 /// time cargo xtest -p consensus twins_test_safety_attack_generator
 ///
 fn twins_test_safety_attack_generator() {
-    const NUM_OF_ROUNDS: usize = 4; // FIXME: Tweak this parameter
+    const NUM_OF_ROUNDS: usize = 7; // FIXME: Tweak this parameter
     const NUM_OF_NODES: usize = 4; // FIXME: Tweak this parameter
     const NUM_OF_PARTITIONS: usize = 2; // FIXME: Tweak this parameter
 
@@ -2356,7 +2356,7 @@ fn twins_test_safety_attack_generator() {
     // PRINT_TESTCASES indicates whether to print the generated testcases to file.
     // OPTION_PRINT_TESTCASES indicates how many testcases should be printed per file.
     const PRINT_TESTCASES: bool = true; // FIXME: Tweak this parameter
-    const OPTION_PRINT_TESTCASES: usize = 1000; // FIXME: Tweak this parameter
+    const OPTION_PRINT_TESTCASES: usize = 100; // FIXME: Tweak this parameter
 
 
     // The parameters FILTER_X_PARTITIONS and OPTION_FILTER_X_PARTITIONS let
@@ -2390,8 +2390,8 @@ fn twins_test_safety_attack_generator() {
     //     0: To simply select the first Y testcases (deterministic)
     //     1: To randomly pick *without replacement* Y testcases (probabilistic)
     //     2: To randomly pick *with replacement* Y testcases (probabilistic)
-    const FILTER_Y_PARTITIONS_WITH_LEADERS: usize = 10; // FIXME: Tweak this parameter
-    const OPTION_FILTER_Y_PARTITIONS_WITH_LEADERS: usize = 2; // FIXME: Tweak this parameter
+    const FILTER_Y_PARTITIONS_WITH_LEADERS: usize = 3; // FIXME: Tweak this parameter
+    const OPTION_FILTER_Y_PARTITIONS_WITH_LEADERS: usize = 0; // FIXME: Tweak this parameter
 
 
     // OPTION_TESTCASE_GENERATOR lets us choose how to distribute 'scenario-leaders'
@@ -2431,7 +2431,7 @@ fn twins_test_safety_attack_generator() {
     //     0: To simply select the first Z testcases (deterministic)
     //     1: To randomly pick *without replacement* Z testcases (probabilistic)
     //     2: To randomly pick *with replacement* Z testcases (probabilistic)
-    const FILTER_Z_TESTCASES: usize = 2000; // FIXME: Tweak this parameter
+    const FILTER_Z_TESTCASES: usize = 0; // FIXME: Tweak this parameter
     const OPTION_FILTER_Z_TESTCASES: usize = 0; // FIXME: Tweak this parameter
 
 
@@ -2813,6 +2813,21 @@ fn twins_test_safety_attack_generator() {
             );
         }
         num_test_cases += 1;
+    }
+
+    if PRINT_TESTCASES {
+        // print remaining test cases.
+        if testcases_to_print.len() >0  {
+            let filename = format!(
+                "testcase-{}-{}.bin", 
+                num_test_cases - testcases_to_print.len(), 
+                num_test_cases - 1
+            );  
+            let to_print = Testcases {
+                testcases: testcases_to_print.clone()
+            };
+            print_testcases(&to_print, &filename);
+        }
     }
 
     println!(
