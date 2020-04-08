@@ -5,7 +5,7 @@ mkdir -p logs
 cd libra/consensus
 source $HOME/.cargo/env
 
-testcases=/home/ubuntu/logs/testcase*.bin
+testcases="/home/ubuntu/testcases/testcase*.bin"
 for file in $testcases
 do 
     name="$(basename -- $file)"

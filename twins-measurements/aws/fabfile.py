@@ -5,6 +5,7 @@ from botocore.exceptions import ClientError
 from fabric import task, Connection, ThreadingGroup as Group
 from paramiko import RSAKey
 import os
+import glob
 
 ec2 = boto3.client('ec2')
 region = os.environ.get("AWS_EC2_REGION")
@@ -137,13 +138,41 @@ def update(ctx):
 
 
 @task
+def upload(ctx):
+    ''' Upload testcases to all AWS servers.
+
+    COMMAND:    fab upload
+    '''
+    files = glob.glob('./testcases/*.bin')
+
+    set_hosts(ctx)
+    for host in ctx.hosts:
+        c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
+        c.run('mkdir -p testcases')
+        for f in files:
+            print(f'Uploading {f}...')
+            c.put(f, './testcases')
+
+
+@task
 def run(ctx):
     ''' Runs experiments with the specified configs.
 
+    CONFIG: 
+        0: Run all testcases from the files located in /testcases.
+        1: Run randomly selected scenarios.
+
     COMMANDS:	fab run
     '''
-    script = 'twins-aws-run-exhaustive.sh'
-    runs = '10'
+    CONFIG = 0
+    RUNS = '10'  # Only used if CONFIG = 1.
+
+    if CONFIG == 0:
+        script = 'twins-aws-run-exhaustive.sh'
+    elif CONFIG == 1:
+        script = 'twins-aws-run-random.sh'
+    else:
+        assert False
 
     set_hosts(ctx)
 
@@ -152,13 +181,10 @@ def run(ctx):
         c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
         c.put(script, '.')
         c.run(f'chmod +x {script}')
-        c.run('mkdir -p testcases')
-        c.put('testcases/testcase-1-1000.bin', './testcases')
-        c.put('testcases/testcase-1001-2000.bin', './testcases')
 
     # Run script on all machines in parallel
-    #g = Group(*ctx.hosts, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
-    #g.run(f'screen -d -m ./{script} {runs}')
+    g = Group(*ctx.hosts, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
+    g.run(f'screen -d -m ./{script} {RUNS}')
 
 
 @task
