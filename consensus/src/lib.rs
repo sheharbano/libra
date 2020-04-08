@@ -35,3 +35,5 @@ mod state_replication;
 mod txn_manager;
 
 #[macro_use] extern crate itertools;
+extern crate rustc_serialize;
+extern crate bincode;

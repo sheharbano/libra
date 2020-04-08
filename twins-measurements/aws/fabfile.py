@@ -142,7 +142,7 @@ def run(ctx):
 
     COMMANDS:	fab run
     '''
-    script = 'twins-aws-run.sh'
+    script = 'twins-aws-run-exhaustive.sh'
     runs = '10'
 
     set_hosts(ctx)
@@ -152,10 +152,13 @@ def run(ctx):
         c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
         c.put(script, '.')
         c.run(f'chmod +x {script}')
+        c.run('mkdir -p testcases')
+        c.put('testcases/testcase-1-1000.bin', './testcases')
+        c.put('testcases/testcase-1001-2000.bin', './testcases')
 
     # Run script on all machines in parallel
-    g = Group(*ctx.hosts, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
-    g.run(f'screen -d -m ./{script} {runs}')
+    #g = Group(*ctx.hosts, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
+    #g.run(f'screen -d -m ./{script} {runs}')
 
 
 @task

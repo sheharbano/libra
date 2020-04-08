@@ -47,6 +47,13 @@ use libra_logger::prelude::*;
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 use libra_logger::Level;
+use std::fs::File;
+use std::io::prelude::*;
+use serde::{Serialize, Deserialize};
+use bincode::serialize_into;
+use bincode::deserialize_from;
+use std::io::BufWriter;
+use std::io::BufReader;
 
 /// Auxiliary struct that is preparing SMR for the test
 struct SMRNode {
@@ -1725,12 +1732,18 @@ fn twins_safety_violation_scenario_executor_test() {
         );
     }
 
+    let testcase = Testcase {
+        num_of_rounds: 0, // not used
+        num_of_nodes: num_nodes,
+        num_of_partitions: 0, // not used
+        round_partitions_idx: round_partitions_idx,
+        twins_round_proposers_idx: twins_round_proposers_idx
+    };
+
     execute_scenario(
-        num_nodes,
         &target_nodes,
         &node_to_twin,
-        round_partitions_idx,
-        twins_round_proposers_idx,
+        testcase,
         true,
     );
 }
@@ -1834,8 +1847,6 @@ fn longest_vector(vecs: &Vec<Vec<HashValue>>) -> (usize, usize) {
     (idx, max_len)
 }
 
-
-
 /// This is the test executor. It gets as input a scenario description
 /// consisting of a node-set, a subset of which are marked target; and
 /// a round-by-round message delivery schedule and leaders. The executor
@@ -1847,14 +1858,16 @@ fn longest_vector(vecs: &Vec<Vec<HashValue>>) -> (usize, usize) {
 /// BFT protocol among nodes for a pre-specified number of rounds, at
 /// the end of which, the executor checks for violations.
 fn execute_scenario(
-    num_nodes: usize,
     target_nodes: &Vec<usize>, // the nodes for which to create twins
     node_to_twin: &HashMap<usize, usize>,
-    round_partitions_idx: HashMap<u64, Vec<Vec<usize>>>,
-    twins_round_proposers_idx: HashMap<Round, Vec<usize>>,
+    testcase: Testcase,
     enable_safety_assertion: bool,
 ) {
     debug!(">>>>> Executing scenario\n");
+
+    let num_nodes = testcase.num_of_nodes;
+    let round_partitions_idx = testcase.round_partitions_idx;
+    let twins_round_proposers_idx = testcase.twins_round_proposers_idx;
 
     debug!(">>>>> Setting up configuration\n");
 
@@ -2208,6 +2221,116 @@ fn filter_n_elements<T: Clone> (
 }
 
 
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+struct Testcase {
+    num_of_rounds: usize,
+    num_of_nodes: usize,
+    num_of_partitions: usize,
+    round_partitions_idx: HashMap<u64, Vec<Vec<usize>>>,
+    twins_round_proposers_idx: HashMap<Round, Vec<usize>>
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+struct Testcases {
+    testcases: Vec<Testcase>
+}
+
+fn print_testcases(testcases: &Testcases, filename: &str) {
+    // Encode
+    let encoded: Vec<u8> = bincode::serialize(testcases).unwrap();
+
+    // Write to file
+    let mut file = File::create(filename).unwrap();
+    let mut writer = BufWriter::new(file);
+    writer.write_all(&encoded[..]).unwrap();
+}
+
+fn read_testcases(filename: &str) -> Testcases {
+    // Read from file
+    let mut file = File::open(filename).unwrap();
+    let mut encoded_read_from_file: Vec<u8> = Vec::new();
+    file.read_to_end(&mut encoded_read_from_file).unwrap();
+
+    // Decode
+    let decoded: Testcases = bincode::deserialize(&encoded_read_from_file[..]).unwrap();
+    decoded
+}
+
+#[test]
+/// run:
+/// cargo xtest -p consensus test_print_and_read_testcase -- --nocapture
+fn test_print_and_read_testcase() {
+    let mut round_partitions_idx = HashMap::new();
+    round_partitions_idx.insert(0, vec![vec![0], vec![1, 2, 3, 4]]);
+    round_partitions_idx.insert(1, vec![vec![0], vec![1, 2, 3, 4]]);
+    round_partitions_idx.insert(2, vec![vec![0], vec![1, 2, 3, 4]]);
+    round_partitions_idx.insert(2, vec![vec![0, 2, 4], vec![1, 3]]);
+
+    let mut twins_round_proposers_idx = HashMap::new();
+    twins_round_proposers_idx.insert(0, vec![0, 4]);
+    twins_round_proposers_idx.insert(1, vec![0, 4]);
+    twins_round_proposers_idx.insert(2, vec![0, 4]);
+    twins_round_proposers_idx.insert(3, vec![0, 4]);
+
+    let testcase = Testcase {
+        num_of_rounds: 4,
+        num_of_nodes: 4,
+        num_of_partitions: 2,
+        round_partitions_idx,
+        twins_round_proposers_idx
+    };
+    let to_print = Testcases {
+        testcases: vec![testcase]
+    };
+    let filename = "test_testcase.bin";
+
+    print_testcases(&to_print, filename);
+    let decoded: Testcases = read_testcases(filename);  
+    assert_eq!(decoded, to_print);
+}
+
+#[test]
+/// run:
+/// cargo xtest -p consensus execute_testcases_from_file -- --nocapture
+fn execute_testcases_from_file() {
+    let filename = "to_execute.bin";
+    let to_execute: Testcases = read_testcases(filename);
+    let length = to_execute.testcases.len();
+    
+    let start_execution = Instant::now();
+    for (i, item) in to_execute.testcases.iter().enumerate() {
+        debug!("=====================================");
+        debug!("TEST CASE {:?}:  {:?}", i, &item);
+        debug!("=====================================");
+
+        let testcase = item.clone();
+        let num_of_nodes = testcase.num_of_nodes;
+
+        let f = (num_of_nodes - 1) / 3;
+        let target_nodes: Vec<usize> = (0..f).collect();
+        let mut node_to_twin: HashMap<usize, usize> = HashMap::new();
+        for (each, target) in target_nodes.iter().enumerate() {
+            let twin_index = num_of_nodes + each;
+            node_to_twin.insert(*target, twin_index);
+        }
+        execute_scenario(
+            &target_nodes,
+            &node_to_twin,
+            testcase, // this changes for each test
+            false, // we want the tests to continue even after finding safety
+            // issue. We will look at all safety issues in post-analysis
+        );
+    }
+    let execution_duration = start_execution.elapsed();
+    println!(
+        "Time elapsed for the execution of {:?} testcases: {:?} ms",
+        length,
+        execution_duration.as_millis()
+    );
+    
+}
+
+
 #[test]
 /// This function is the test generator. It produces various test cases to be
 /// fed into the test executor (execute_scenario()). Each test case represents
@@ -2223,12 +2346,17 @@ fn filter_n_elements<T: Clone> (
 /// time cargo xtest -p consensus twins_test_safety_attack_generator
 ///
 fn twins_test_safety_attack_generator() {
-    const NUM_OF_ROUNDS: usize = 7; // FIXME: Tweak this parameter
+    const NUM_OF_ROUNDS: usize = 4; // FIXME: Tweak this parameter
     const NUM_OF_NODES: usize = 4; // FIXME: Tweak this parameter
     const NUM_OF_PARTITIONS: usize = 2; // FIXME: Tweak this parameter
 
     // If true will not execute scenarios, just print stats
-    const IS_DRY_RUN: bool = false; // FIXME: Tweak this parameter
+    const IS_DRY_RUN: bool = true; // FIXME: Tweak this parameter
+
+    // PRINT_TESTCASES indicates whether to print the generated testcases to file.
+    // OPTION_PRINT_TESTCASES indicates how many testcases should be printed per file.
+    const PRINT_TESTCASES: bool = true; // FIXME: Tweak this parameter
+    const OPTION_PRINT_TESTCASES: usize = 1000; // FIXME: Tweak this parameter
 
 
     // The parameters FILTER_X_PARTITIONS and OPTION_FILTER_X_PARTITIONS let
@@ -2303,7 +2431,7 @@ fn twins_test_safety_attack_generator() {
     //     0: To simply select the first Z testcases (deterministic)
     //     1: To randomly pick *without replacement* Z testcases (probabilistic)
     //     2: To randomly pick *with replacement* Z testcases (probabilistic)
-    const FILTER_Z_TESTCASES: usize = 0; // FIXME: Tweak this parameter
+    const FILTER_Z_TESTCASES: usize = 2000; // FIXME: Tweak this parameter
     const OPTION_FILTER_Z_TESTCASES: usize = 0; // FIXME: Tweak this parameter
 
 
@@ -2613,9 +2741,10 @@ fn twins_test_safety_attack_generator() {
     // =============================================
 
     let mut num_test_cases = 1;
+    let mut testcases_to_print: Vec<Testcase> = Vec::new();
 
     for each_test in test_cases {
-        if (!IS_DRY_RUN) {
+        if !IS_DRY_RUN {
             debug!("=====================================");
             debug!("TEST CASE {:?}:  {:?}", num_test_cases, &each_test);
             debug!("=====================================");
@@ -2644,14 +2773,36 @@ fn twins_test_safety_attack_generator() {
             round += 1;
         }
 
-        if (!IS_DRY_RUN) {
+        let testcase = Testcase {
+            num_of_rounds: NUM_OF_ROUNDS,
+            num_of_nodes: NUM_OF_NODES,
+            num_of_partitions: NUM_OF_PARTITIONS,
+            round_partitions_idx: round_partitions_idx.clone(),
+            twins_round_proposers_idx: twins_round_proposers_idx.clone()
+        };
+
+        if PRINT_TESTCASES {
+            testcases_to_print.push(testcase.clone());
+            if testcases_to_print.len() >= OPTION_PRINT_TESTCASES {
+                let filename = format!(
+                    "testcase-{}-{}.bin", 
+                    num_test_cases - testcases_to_print.len() + 1, 
+                    num_test_cases
+                );  
+                let to_print = Testcases {
+                    testcases: testcases_to_print.clone()
+                };
+                print_testcases(&to_print, &filename);
+                testcases_to_print.clear();
+            }
+        }
+
+        if !IS_DRY_RUN {
             let start_execution = Instant::now();
             execute_scenario(
-                NUM_OF_NODES,
                 &target_nodes,
                 &node_to_twin,
-                round_partitions_idx,      // this changes for each test
-                twins_round_proposers_idx, // this changes for each test
+                testcase, // this changes for each test
                 false, // we want the tests to continue even after finding safety
                 // issue. We will look at all safety issues in post-analysis
             );
@@ -2661,7 +2812,6 @@ fn twins_test_safety_attack_generator() {
                 execution_duration.as_millis()
             );
         }
-
         num_test_cases += 1;
     }
 

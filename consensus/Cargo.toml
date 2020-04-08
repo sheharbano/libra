@@ -53,6 +53,8 @@ storage-client = { path = "../storage/storage-client", version = "0.1.0" }
 libra-vm = { path = "../language/libra-vm", version = "0.1.0" }
 
 itertools = "0.8.2"
+rustc-serialize = "*"
+bincode = "*"
 
 [dev-dependencies]
 cached = "0.12.0"
