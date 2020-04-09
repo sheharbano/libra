@@ -195,14 +195,22 @@ def run(ctx):
 
 @task
 def kill(ctx):
-    ''' Kill the process on all machines.
+    ''' Kill the process on all machines and clear all state.
 
     COMMANDS:   fab kill
     '''
 
     set_hosts(ctx)
     g = Group(*ctx.hosts, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
+
+    # Kill process.
     g.run(f'tmux kill-server || true')
+
+    # Clear.
+    g.run(f'rm logs/* || true')
+    g.run(f'rm testcases/* || true')
+    g.run(f'rm executed_tests/* || true')
+    g.run(f'rm log_size || true')
 
 
 @task

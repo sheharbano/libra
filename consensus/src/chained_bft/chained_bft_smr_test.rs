@@ -2357,8 +2357,8 @@ fn twins_test_safety_attack_generator() {
     // PRINT_TESTCASES indicates whether to print the generated testcases to file.
     // OPTION_PRINT_TESTCASES indicates how many testcases should be printed per file.
     const PRINT_TESTCASES: bool = true; // FIXME: Tweak this parameter
-    const OPTION_PRINT_TESTCASES: usize = 100; // FIXME: Tweak this parameter
-
+    const OPTION_PRINT_TESTCASES: usize = 3; // FIXME: Tweak this parameter
+    const PRINT_FOLDER: &str = "../twins-measurements/aws/testcases/"; // FIXME: Tweak this parameter
 
     // The parameters FILTER_X_PARTITIONS and OPTION_FILTER_X_PARTITIONS let
     // us select X partition scenarios from all possible scenarios (i.e. ways
@@ -2786,7 +2786,8 @@ fn twins_test_safety_attack_generator() {
             testcases_to_print.push(testcase.clone());
             if testcases_to_print.len() >= OPTION_PRINT_TESTCASES {
                 let filename = format!(
-                    "testcase-{}-{}.bin", 
+                    "{}testcase-{}-{}.bin", 
+                    PRINT_FOLDER,
                     num_test_cases - testcases_to_print.len() + 1, 
                     num_test_cases
                 );  
