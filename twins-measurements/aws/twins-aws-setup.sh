@@ -3,7 +3,7 @@
 # NOTE: Create an AWS instance with enough SSD storage in the primary 
 # partitions (100GB is more than enough)
 
-rm -fr *
+#rm -fr *
 
 sudo apt-get update
 sudo apt-get -y upgrade

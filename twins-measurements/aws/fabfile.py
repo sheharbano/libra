@@ -24,7 +24,8 @@ def credentials():
 def filter(instance):
     ''' Specify a filter to select only the desired hosts. '''
     name = next(tag['Value'] for tag in instance.tags if 'Name'in tag['Key'])
-    return 'twins'.casefold() in name.casefold()
+    name = name.casefold()
+    return ('twins'.casefold() in name) and ('generator' not in name)
 
 # --- End Config ---
 
@@ -123,7 +124,7 @@ def install(ctx):
 
     # TODO: find a way to forgo the grub config prompt and run the setup
     # script automatically.
-    print(f'The script "{script}"" is now uploaded on every machine;'
+    print(f'The script "{setup_script}"" is now uploaded on every machine; '
           'Run it manually and pay attention to the APT grub config prompt.')
 
 
@@ -133,9 +134,21 @@ def update(ctx):
 
     COMMANDS:	fab update
     '''
+    run_script = 'twins-aws-run.sh'
+    maintenance_script = 'twins-aws-maintenance.sh'
+
+    job = f'*/2 * * * * ./{maintenance_script}'
+
     set_hosts(ctx)
-    g = Group(*ctx.hosts, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
-    g.run('cd libra/ && git pull')
+    for host in ctx.hosts:
+        c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
+        c.put(run_script, '.')
+        c.run(f'chmod +x {run_script}')
+        c.put(maintenance_script, '.')
+        c.run(f'chmod +x {maintenance_script}')
+        c.run('crontab -r || true', hide=True)
+        c.run(f'(crontab -l 2>/dev/null; echo "{job} -with args") | crontab -')
+        c.run('(cd libra/ && git pull)')
 
 
 @task
@@ -148,7 +161,7 @@ def upload(ctx):
 
     set_hosts(ctx)
 
-    # Split testcases (equally) amongst hosts.
+    # Split testcases (fairly equally) amongst hosts.
     host_files = [[] for _ in ctx.hosts]
     for i, f in enumerate(files):
         host_files[i % len(ctx.hosts)].append(files[i])
@@ -157,7 +170,8 @@ def upload(ctx):
     for i, host in enumerate(ctx.hosts):
         c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
         c.run('mkdir -p testcases')
-        print(f'[{i+1}/{len(ctx.hosts)}] Uploading files to {host} ...')
+        progress = f'{i+1}/{len(ctx.hosts)}'
+        print(f'[{progress}] Uploading {len(host_files[i])} files to {host}...')
         for file in host_files[i]:
             c.put(file, './testcases')
 
@@ -173,32 +187,26 @@ def run(ctx):
     COMMANDS:	fab run
     '''
     CONFIG = 0
-    RUNS = '10'  # Only used if CONFIG = 1.
+    RUNS = 10  # Only used if CONFIG = 1.
 
-    run_script = 'twins-aws-run.sh'
-    restart_stalled_script = 'twins-aws-restart-stalled.sh'
-
+    # NOTE: Calling tmux in threaded groups does not work.
     set_hosts(ctx)
-    job = f'*/5 * * * * ./{restart_stalled_script}'  # Crontab job.
-
-    # Upload / update scripts
     for host in ctx.hosts:
         c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
-        c.put(run_script, '.')
-        c.run(f'chmod +x {run_script}')
-        c.put(restart_stalled_script, '.')
-        c.run(f'chmod +x {restart_stalled_script}')
-        c.run('crontab -r || true')
-        c.run(f'(crontab -l 2>/dev/null; echo "{job} -with args") | crontab -')
         c.run(f'tmux new -d -s "twins" ./{run_script} {CONFIG} {RUNS}')
 
 
 @task
 def kill(ctx):
-    ''' Kill the process on all machines and clear all state.
+    ''' Kill the process on all machines and (optionally) clear all state.
+
+    RESET: 
+        False: Only kill the process.
+        True: Kill the process and delete all state and logs.
 
     COMMANDS:   fab kill
     '''
+    RESET = True
 
     set_hosts(ctx)
     g = Group(*ctx.hosts, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
@@ -206,41 +214,47 @@ def kill(ctx):
     # Kill process.
     g.run(f'tmux kill-server || true')
 
-    # Clear.
-    g.run(f'rm logs/* || true')
-    g.run(f'rm testcases/* || true')
-    g.run(f'rm executed_tests/* || true')
-    g.run(f'rm log_size || true')
+    # Reset state and delete logs.
+    if RESET:
+        g.run(f'rm logs/* || true')
+        g.run(f'mv executed_tests/* testcases/ || true')
+        g.run(f'rm last_* || true')
 
 
 @task
-def logs(ctx):
-    ''' Prints the names of the log files. 
-    It gives an idea of the progress of the execution.
+def status(ctx):
+    ''' Prints the execution progress. 
 
     COMMANDS:	fab status
     '''
 
     set_hosts(ctx)
+    status = {}
+    print('Gathering data...\n')
     for host in ctx.hosts:
         c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
-        print(f'>>>> Host: {host}')
-        c.run('ls logs/')
-        print()
+        remaining = c.run('ls -1q testcases/* | wc -l', hide=True)
+        executed = c.run('ls -1q executed_tests/* | wc -l', hide=True)
+        stalled = c.run('ls -1q stalled_testcases/* | wc -l', hide=True)
+        try:
+            # Both logs and testcases are stored in the 'stalled_testcases' folder.
+            stalled = int(stalled.stdout) // 2
+            remaining = int(remaining.stdout)
+            executed = int(executed.stdout) + stalled
+            total = remaining + executed
+        except ValueError:
+            total = remaining = executed = stalled = 'N/A'
 
-@task
-def conflicts(ctx):
-    ''' Check for conflicts in the logs.
+        status[host] = (executed, total, stalled)
 
-    COMMANDS:   fab conflicts
-    '''
-    check_conflicts_script = 'twins-aws-check-conflicts.sh'
-
-    set_hosts(ctx)
-    for host in ctx.hosts:
-        c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
-        c.put(check_conflicts_script, '.')
-        c.run(f'chmod +x {check_conflicts_script}')
-        print(f'>>>> Host: {host}')
-        c.run(f'./{check_conflicts_script}', pty=True)
-        print()
+    print('--------------------------------------------')
+    print('HOST\t\tPROGRESS\tSTALLED')
+    print('--------------------------------------------')
+    for host, values in status.items():
+        print(f'{host}\t{values[0]}/{values[1]}\t\t{values[2]}')
+    print('--------------------------------------------')
+    total_executed = sum([v[0] for v in status.values()])
+    total_total = sum([v[1] for v in status.values()])
+    total_stalled = sum([v[2] for v in status.values()])
+    print(f'TOTAL:\t\t{total_executed}/{total_total}\t\t{total_stalled}')
+    print('--------------------------------------------\n')

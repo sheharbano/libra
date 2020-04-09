@@ -2358,7 +2358,7 @@ fn twins_test_safety_attack_generator() {
     // OPTION_PRINT_TESTCASES indicates how many testcases should be printed per file.
     const PRINT_TESTCASES: bool = true; // FIXME: Tweak this parameter
     const OPTION_PRINT_TESTCASES: usize = 3; // FIXME: Tweak this parameter
-    const PRINT_FOLDER: &str = "../twins-measurements/aws/testcases/"; // FIXME: Tweak this parameter
+    const PRINT_FOLDER: &str = "./testcases/" //"../twins-measurements/aws/testcases/"; // FIXME: Tweak this parameter
 
     // The parameters FILTER_X_PARTITIONS and OPTION_FILTER_X_PARTITIONS let
     // us select X partition scenarios from all possible scenarios (i.e. ways
@@ -2391,7 +2391,7 @@ fn twins_test_safety_attack_generator() {
     //     0: To simply select the first Y testcases (deterministic)
     //     1: To randomly pick *without replacement* Y testcases (probabilistic)
     //     2: To randomly pick *with replacement* Y testcases (probabilistic)
-    const FILTER_Y_PARTITIONS_WITH_LEADERS: usize = 3; // FIXME: Tweak this parameter
+    const FILTER_Y_PARTITIONS_WITH_LEADERS: usize = 0; // FIXME: Tweak this parameter
     const OPTION_FILTER_Y_PARTITIONS_WITH_LEADERS: usize = 0; // FIXME: Tweak this parameter
 
 
