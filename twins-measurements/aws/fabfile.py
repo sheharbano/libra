@@ -118,8 +118,6 @@ def install(ctx):
     set_hosts(ctx)
     for host in ctx.hosts:
         c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
-        c.put(restart_stalled_script, '.')
-        c.run(f'chmod +x {restart_stalled_script}')
         c.put(setup_script, '.')
         c.run(f'chmod +x {setup_script}')
 
@@ -159,7 +157,7 @@ def upload(ctx):
     for i, host in enumerate(ctx.hosts):
         c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
         c.run('mkdir -p testcases')
-        print(f'[{i}/{len(ctx.hosts)}] Uploading files to {host} ...')
+        print(f'[{i+1}/{len(ctx.hosts)}] Uploading files to {host} ...')
         for file in host_files[i]:
             c.put(file, './testcases')
 
@@ -181,19 +179,30 @@ def run(ctx):
     restart_stalled_script = 'twins-aws-restart-stalled.sh'
 
     set_hosts(ctx)
-    job = f'*/5 * * * * ./{restart_stalled_script}'  # Contab job.
+    job = f'*/5 * * * * ./{restart_stalled_script}'  # Crontab job.
 
-    # Upload / update script
+    # Upload / update scripts
     for host in ctx.hosts:
         c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
-        c.put(script, '.')
+        c.put(run_script, '.')
         c.run(f'chmod +x {run_script}')
-        c.run('crontab -r')
+        c.put(restart_stalled_script, '.')
+        c.run(f'chmod +x {restart_stalled_script}')
+        c.run('crontab -r || true')
         c.run(f'(crontab -l 2>/dev/null; echo "{job} -with args") | crontab -')
+        c.run(f'tmux new -d -s "twins" ./{run_script} {CONFIG} {RUNS}')
 
-    # Run script on all machines in parallel
+
+@task
+def kill(ctx):
+    ''' Kill the process on all machines.
+
+    COMMANDS:   fab kill
+    '''
+
+    set_hosts(ctx)
     g = Group(*ctx.hosts, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
-    g.run(f'tmux new-session -d -s "twins" ./{run_script} {CONFIG} {RUNS}')
+    g.run(f'tmux kill-server || true')
 
 
 @task
@@ -207,6 +216,23 @@ def logs(ctx):
     set_hosts(ctx)
     for host in ctx.hosts:
         c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
-        print(f'Host: {host}')
+        print(f'>>>> Host: {host}')
         c.run('ls logs/')
+        print()
+
+@task
+def conflicts(ctx):
+    ''' Check for conflicts in the logs.
+
+    COMMANDS:   fab conflicts
+    '''
+    check_conflicts_script = 'twins-aws-check-conflicts.sh'
+
+    set_hosts(ctx)
+    for host in ctx.hosts:
+        c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
+        c.put(check_conflicts_script, '.')
+        c.run(f'chmod +x {check_conflicts_script}')
+        print(f'>>>> Host: {host}')
+        c.run(f'./{check_conflicts_script}', pty=True)
         print()

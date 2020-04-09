@@ -2300,7 +2300,8 @@ fn execute_testcases_from_file() {
     let start_execution = Instant::now();
     for (i, item) in to_execute.testcases.iter().enumerate() {
         debug!("=====================================");
-        debug!("TEST CASE {:?}:  {:?}", i, &item);
+        debug!("TEST CASE {:?}:", i+1);
+        debug!("{:?}", &item);
         debug!("=====================================");
 
         let testcase = item.clone();
