@@ -2739,6 +2739,7 @@ fn twins_test_safety_attack_generator() {
 
     // =============================================
     // Only print a subset of the testcases
+    // TODO: write this code better, ensure full determinism.
     // =============================================
     let mut machines_info: Vec<usize> = vec![];
     if PRINT_INDEX_FILE != "" {
@@ -2879,11 +2880,6 @@ fn twins_test_safety_attack_generator() {
             print_testcases(&to_print, &filename);
         }
 
-        println!(
-            "We printed {} files.",
-            files_printed
-        );
-
         files_printed += 1;
 
         /*
@@ -2901,6 +2897,11 @@ fn twins_test_safety_attack_generator() {
         }
         */
     }
+
+    println!(
+        "We printed {} files.",
+        files_printed
+    );
 
     println!(
         "\nFinished running total {:?} test cases for {:?} nodes, {:?} twins, \

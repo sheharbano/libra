@@ -138,6 +138,9 @@ def update(ctx):
     maintenance_script = 'twins-aws-maintenance.sh'
 
     set_hosts(ctx)
+    g = Group(*ctx.hosts, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
+    g.run('(cd libra/ && git pull)')
+
     for i, host in enumerate(ctx.hosts):
         c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
         c.put(run_script, '.')
@@ -145,7 +148,6 @@ def update(ctx):
         c.put(maintenance_script, '.')
         c.run(f'chmod +x {maintenance_script}')
         c.run(f'echo -e "{i}\n{len(ctx.hosts)}" > config_file.txt')
-        c.run('(cd libra/ && git pull)')
 
 
 @task
@@ -191,6 +193,7 @@ def run(ctx):
     RUNS = 10  # Only used if CONFIG = 1.
 
     run_script = 'twins-aws-run.sh'
+    maintenance_script = 'twins-aws-maintenance.sh'
     job = f'*/2 * * * * ./{maintenance_script}'
 
     # NOTE: Calling tmux in threaded groups does not work.
@@ -200,7 +203,8 @@ def run(ctx):
         c.run(f'tmux new -d -s "twins" ./{run_script} {CONFIG} {RUNS}')
         if CONFIG == 0:
             c.run('crontab -r || true', hide=True)
-            c.run(f'(crontab -l 2>/dev/null; echo "{job} -with args") | crontab -')
+            c.run(
+                f'(crontab -l 2>/dev/null; echo "{job} -with args") | crontab -')
 
 
 @task
@@ -242,18 +246,18 @@ def status(ctx):
 
     COMMANDS:	fab status
     '''
-
     set_hosts(ctx)
+
     status = {}
+    def count_lines(dir): return f'ls -l {dir} | grep -v ^l | wc -l'
     print('Gathering data...\n')
     for host in ctx.hosts:
         c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
-        #remaining = c.run('ls -1q testcases/* | wc -l', hide=True)
-        remaining = c.run('ls -l testcases/ | grep -v ^l | wc -l', hide=True)
-        executed = c.run('ls -l executed_tests/ | grep -v ^l | wc -l', hide=True)
-        stalled = c.run('ls -l stalled_testcases/ | grep -v ^l | wc -l', hide=True)
+        remaining = c.run(count_lines('testcases'), hide=True)
+        executed = c.run(count_lines('executed_tests'), hide=True)
+        stalled = c.run(count_lines('stalled_testcases'), hide=True)
         try:
-            # Both logs and testcases are stored in the 'stalled_testcases' folder.
+            # Both logs and testcases are stored in 'stalled_testcases'.
             stalled = int(stalled.stdout) // 2
             remaining = int(remaining.stdout)
             executed = int(executed.stdout) + stalled
