@@ -51,9 +51,6 @@ then
     # Kill the current test.
     tmux kill-server
 
-    echo "testcases/${testcase_file}" >> DEBUG
-    echo "logs/${current_logfile_name}" >> DEBUG
-
     # Move out stalled testcases.
     testcase_file=$(echo "$last_logfile_name" | cut -f 1 -d '.')
     testcase_file="$testcase_file.bin"

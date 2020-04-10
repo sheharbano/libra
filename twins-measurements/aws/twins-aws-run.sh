@@ -48,7 +48,7 @@ elif [ $CONFIG == 1 ]; then
 
 # Generate testcases.
 elif [ $CONFIG == 2 ]; then
-    cargo xtest -p consensus twins_test_safety_attack_generator -- --nocapture
+    cargo xtest -p consensus twins_test_safety_attack_generator -- --nocapture >> "../../generator_logs" 2>&1
 
 else
     echo "Wrong config parameter."

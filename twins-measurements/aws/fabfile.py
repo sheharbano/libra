@@ -137,8 +137,6 @@ def update(ctx):
     run_script = 'twins-aws-run.sh'
     maintenance_script = 'twins-aws-maintenance.sh'
 
-    job = f'*/2 * * * * ./{maintenance_script}'
-
     set_hosts(ctx)
     for i, host in enumerate(ctx.hosts):
         c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
@@ -146,8 +144,6 @@ def update(ctx):
         c.run(f'chmod +x {run_script}')
         c.put(maintenance_script, '.')
         c.run(f'chmod +x {maintenance_script}')
-        c.run('crontab -r || true', hide=True)
-        c.run(f'(crontab -l 2>/dev/null; echo "{job} -with args") | crontab -')
         c.run(f'echo -e "{i}\n{len(ctx.hosts)}" > config_file.txt')
         c.run('(cd libra/ && git pull)')
 
@@ -194,11 +190,17 @@ def run(ctx):
     CONFIG = 2
     RUNS = 10  # Only used if CONFIG = 1.
 
+    run_script = 'twins-aws-run.sh'
+    job = f'*/2 * * * * ./{maintenance_script}'
+
     # NOTE: Calling tmux in threaded groups does not work.
     set_hosts(ctx)
     for host in ctx.hosts:
         c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
         c.run(f'tmux new -d -s "twins" ./{run_script} {CONFIG} {RUNS}')
+        if CONFIG == 0:
+            c.run('crontab -r || true', hide=True)
+            c.run(f'(crontab -l 2>/dev/null; echo "{job} -with args") | crontab -')
 
 
 @task
@@ -211,20 +213,27 @@ def kill(ctx):
 
     COMMANDS:   fab kill
     '''
-    RESET = True
+    RESET = False
+    DELETE_ALL = True
 
     set_hosts(ctx)
     g = Group(*ctx.hosts, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
 
     # Kill process.
     g.run(f'tmux kill-server || true')
+    g.run('crontab -r || true')
+    g.run('echo -1 > last_logfile')
 
     # Reset state and delete logs.
     if RESET:
-        g.run(f'mv executed_tests/* testcases/ || true')
-        g.run(f'mv stalled_testcases/* testcases/ || true')
-        g.run('echo -1 > last_logfile')
-        g.run(f'rm -r logs stalled_testcases testcases executed_tests || true')
+        g.run(f'mv executed_tests/*.bin testcases/ || true')
+        g.run(f'mv stalled_testcases/*.bin testcases/ || true')
+
+    if DELETE_ALL:
+        g.run(f'rm -r stalled_testcases || true')
+        g.run(f'rm -r testcases || true')
+        g.run(f'rm -r executed_tests || true')
+        g.run(f'rm -r logs || true')
 
 
 @task
@@ -239,9 +248,10 @@ def status(ctx):
     print('Gathering data...\n')
     for host in ctx.hosts:
         c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
-        remaining = c.run('ls -1q testcases/* | wc -l', hide=True)
-        executed = c.run('ls -1q executed_tests/* | wc -l', hide=True)
-        stalled = c.run('ls -1q stalled_testcases/* | wc -l', hide=True)
+        #remaining = c.run('ls -1q testcases/* | wc -l', hide=True)
+        remaining = c.run('ls -l testcases/ | grep -v ^l | wc -l', hide=True)
+        executed = c.run('ls -l executed_tests/ | grep -v ^l | wc -l', hide=True)
+        stalled = c.run('ls -l stalled_testcases/ | grep -v ^l | wc -l', hide=True)
         try:
             # Both logs and testcases are stored in the 'stalled_testcases' folder.
             stalled = int(stalled.stdout) // 2

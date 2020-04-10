@@ -2762,7 +2762,6 @@ fn twins_test_safety_attack_generator() {
         let chunk_size = test_cases.len() / num_of_machines;
         for chunk in test_cases.chunks(chunk_size) {
             if machine_index == (num_of_machines-1) && index >= machine_index {
-                println!("HERE");
                 let mut tmp = chunk.to_vec();
                 test_cases_tmp.append(&mut tmp);
             }
@@ -2866,6 +2865,7 @@ fn twins_test_safety_attack_generator() {
         num_test_cases += 1;
     }
 
+    let mut files_printed = 1;
     if PRINT_TESTCASES {
         for (i, chunk) in testcases_to_print.chunks(OPTION_PRINT_TESTCASES).enumerate() {
             let to_print = Testcases {
@@ -2878,6 +2878,13 @@ fn twins_test_safety_attack_generator() {
             );  
             print_testcases(&to_print, &filename);
         }
+
+        println!(
+            "We printed {} files.",
+            files_printed
+        );
+
+        files_printed += 1;
 
         /*
         // print remaining test cases.
