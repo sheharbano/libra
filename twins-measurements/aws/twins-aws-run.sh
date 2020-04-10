@@ -1,7 +1,11 @@
 #!/bin/bash
 
-mkdir -p logs # Contains log files.
-mkdir -p executed_tests # Contains test files that are already executed (if CONFIG = 0)
+# Create all possibly required files and directories.
+mkdir -p logs
+mkdir -p executed_tests
+mkdir -p testcases
+mkdir -p stalled_testcases
+echo -1 > last_logfile
 
 cd libra/consensus
 source $HOME/.cargo/env
@@ -42,6 +46,10 @@ elif [ $CONFIG == 1 ]; then
         logfile="/home/ubuntu/logs/twins-${now}_${i}.log"
         cargo xtest -p consensus twins_test_safety_attack_generator -- --nocapture >> "${logfile}" 2>&1
     done
+
+# Generate testcases.
+elif [ $CONFIG == 2 ]; then
+    cargo xtest -p consensus twins_test_safety_attack_generator -- --nocapture
 
 else
     echo "Wrong config parameter."

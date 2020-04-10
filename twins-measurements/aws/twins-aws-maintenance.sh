@@ -1,6 +1,13 @@
 #!/bin/bash
 # This script is run regularly; eg. every 5 minutes.
 
+mkdir -p logs
+mkdir -p executed_tests
+mkdir -p testcases
+mkdir -p stalled_testcases
+echo -1 > last_logfile
+
+
 # ------ Delete logs with no conflicts ------
 # This is necessary otherwise we run out of disc space.
 
@@ -18,9 +25,6 @@ done
 
 
 # ------ Restart stalled processes ------
-
-mkdir -p logs
-mkdir -p stalled_testcases
 
 # Get persisted state.
 test -f last_logfile || touch last_logfile

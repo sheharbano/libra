@@ -154,7 +154,9 @@ def update(ctx):
 
 @task
 def upload(ctx):
-    ''' Upload testcases to all AWS servers.
+    ''' [Obsolete] Upload testcases to all AWS servers.
+    This command is obsolete; testcases are now generated straights on the
+    AWS machines.
 
     COMMAND:    fab upload
     '''
@@ -185,10 +187,11 @@ def run(ctx):
     CONFIG: 
         0: Run all testcases from the files located in /testcases.
         1: Run randomly selected scenarios.
+        2: Generate testcases, sharded on each machine.
 
     COMMANDS:	fab run
     '''
-    CONFIG = 0
+    CONFIG = 2
     RUNS = 10  # Only used if CONFIG = 1.
 
     # NOTE: Calling tmux in threaded groups does not work.
@@ -218,9 +221,8 @@ def kill(ctx):
 
     # Reset state and delete logs.
     if RESET:
-        g.run(f'rm logs/* || true')
         g.run(f'mv executed_tests/* testcases/ || true')
-        g.run(f'rm last_* || true')
+        g.run(f'mv stalled_testcases/* testcases/ || true')
 
 
 @task
