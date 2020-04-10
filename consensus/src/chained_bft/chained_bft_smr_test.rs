@@ -2318,8 +2318,7 @@ fn execute_testcases_from_file() {
             &target_nodes,
             &node_to_twin,
             testcase, // this changes for each test
-            false, // we want the tests to continue even after finding safety
-            // issue. We will look at all safety issues in post-analysis
+            true,
         );
     }
     let execution_duration = start_execution.elapsed();

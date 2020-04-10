@@ -189,7 +189,7 @@ def run(ctx):
 
     COMMANDS:	fab run
     '''
-    CONFIG = 2
+    CONFIG = 0
     RUNS = 10  # Only used if CONFIG = 1.
 
     run_script = 'twins-aws-run.sh'
@@ -218,7 +218,7 @@ def kill(ctx):
     COMMANDS:   fab kill
     '''
     RESET = False
-    DELETE_ALL = True
+    DELETE_ALL = False
 
     set_hosts(ctx)
     g = Group(*ctx.hosts, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
@@ -232,12 +232,14 @@ def kill(ctx):
     if RESET:
         g.run(f'mv executed_tests/*.bin testcases/ || true')
         g.run(f'mv stalled_testcases/*.bin testcases/ || true')
+        #g.run(f'rm stalled_testcases/*.log || true')
 
     if DELETE_ALL:
         g.run(f'rm -r stalled_testcases || true')
         g.run(f'rm -r testcases || true')
         g.run(f'rm -r executed_tests || true')
         g.run(f'rm -r logs || true')
+        g.run(f'rm generator_logs || true')
 
 
 @task
