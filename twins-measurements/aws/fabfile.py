@@ -223,6 +223,8 @@ def kill(ctx):
     if RESET:
         g.run(f'mv executed_tests/* testcases/ || true')
         g.run(f'mv stalled_testcases/* testcases/ || true')
+        g.run('echo -1 > last_logfile')
+        g.run(f'rm -r logs stalled_testcases testcases executed_tests || true')
 
 
 @task

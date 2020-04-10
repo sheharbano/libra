@@ -5,7 +5,6 @@ mkdir -p logs
 mkdir -p executed_tests
 mkdir -p testcases
 mkdir -p stalled_testcases
-echo -1 > last_logfile
 
 cd libra/consensus
 source $HOME/.cargo/env
