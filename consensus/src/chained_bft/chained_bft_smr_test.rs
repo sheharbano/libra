@@ -2299,10 +2299,10 @@ fn execute_testcases_from_file() {
     
     let start_execution = Instant::now();
     for (i, item) in to_execute.testcases.iter().enumerate() {
-        debug!("=====================================");
-        debug!("TEST CASE {:?}:", i+1);
-        debug!("{:?}", &item);
-        debug!("=====================================");
+        println!("=====================================");
+        println!("TEST CASE {:?}:", i+1);
+        println!("{:?}", &item);
+        println!("=====================================");
 
         let testcase = item.clone();
         let num_of_nodes = testcase.num_of_nodes;
@@ -2358,7 +2358,8 @@ fn twins_test_safety_attack_generator() {
     // OPTION_PRINT_TESTCASES indicates how many testcases should be printed per file.
     const PRINT_TESTCASES: bool = true; // FIXME: Tweak this parameter
     const OPTION_PRINT_TESTCASES: usize = 3; // FIXME: Tweak this parameter
-    const PRINT_FOLDER: &str = "../../testcases/"; //"../twins-measurements/aws/testcases/"; // FIXME: Tweak this parameter
+    const PRINT_FOLDER: &str = "../../testcases/";  //"../twins-measurements/aws/testcases/";
+    const PRINT_INDEX_FILE: &str = "../../config_file.txt"; //"../twins-measurements/aws/config_file.txt";
 
     // The parameters FILTER_X_PARTITIONS and OPTION_FILTER_X_PARTITIONS let
     // us select X partition scenarios from all possible scenarios (i.e. ways
@@ -2720,7 +2721,7 @@ fn twins_test_safety_attack_generator() {
         assert!(false)
     }
 
-    debug!("We have generated {:?} testcases.", test_cases.len());
+    println!("We have generated {:?} testcases.", test_cases.len());
     if FILTER_Z_TESTCASES != 0 {
         assert!(FILTER_Z_TESTCASES > 0);
         old_list_length = test_cases.len();
@@ -2736,6 +2737,52 @@ fn twins_test_safety_attack_generator() {
         );
     }
 
+    // =============================================
+    // Only print a subset of the testcases
+    // =============================================
+    let mut machines_info: Vec<usize> = vec![];
+    if PRINT_INDEX_FILE != "" {
+        let mut f = File::open(PRINT_INDEX_FILE).unwrap();
+        let mut fileReader = BufReader::new(f);
+        for line in fileReader.lines() {
+            match line {
+                Err(why)   => panic!("{:?}", why),
+                Ok(string) => match string.trim().parse::<usize>() {
+                    Err(why) => panic!("Not a number!"),
+                    Ok(number) => machines_info.push(number)
+                }
+            }
+        }
+        assert_eq!(machines_info.len(), 2);
+        let machine_index = machines_info[0];
+        let num_of_machines =  machines_info[1];
+
+        let mut index = 0;
+        let mut test_cases_tmp = Vec::new();
+        let chunk_size = test_cases.len() / num_of_machines;
+        for chunk in test_cases.chunks(chunk_size) {
+            if machine_index == (num_of_machines-1) && index >= machine_index {
+                println!("HERE");
+                let mut tmp = chunk.to_vec();
+                test_cases_tmp.append(&mut tmp);
+            }
+            else if index == machine_index {
+                test_cases_tmp = chunk.to_vec();
+                break;
+            }
+            index += 1;
+        }       
+        assert!(!test_cases_tmp.is_empty());
+        println!(
+            "We are machine index {} (out of {}); we only print {} testcases (out of {}).",
+            machine_index,
+            num_of_machines,
+            test_cases_tmp.len(),
+            test_cases.len()
+        );
+        test_cases = test_cases_tmp;
+    }
+    
 
     // =============================================
     // Now we are ready to prepare and execute each scenario via the executor
@@ -2746,9 +2793,9 @@ fn twins_test_safety_attack_generator() {
 
     for each_test in test_cases {
         if !IS_DRY_RUN {
-            debug!("=====================================");
-            debug!("TEST CASE {:?}:  {:?}", num_test_cases, &each_test);
-            debug!("=====================================");
+            println!("=====================================");
+            println!("TEST CASE {:?}:  {:?}", num_test_cases, &each_test);
+            println!("=====================================");
         }
 
         // Creating data structures that specify round-by-round network partitions
@@ -2784,6 +2831,7 @@ fn twins_test_safety_attack_generator() {
 
         if PRINT_TESTCASES {
             testcases_to_print.push(testcase.clone());
+            /*
             if testcases_to_print.len() >= OPTION_PRINT_TESTCASES {
                 let filename = format!(
                     "{}testcase-{}-{}.bin", 
@@ -2797,6 +2845,7 @@ fn twins_test_safety_attack_generator() {
                 print_testcases(&to_print, &filename);
                 testcases_to_print.clear();
             }
+            */
         }
 
         if !IS_DRY_RUN {
@@ -2818,8 +2867,21 @@ fn twins_test_safety_attack_generator() {
     }
 
     if PRINT_TESTCASES {
+        for (i, chunk) in testcases_to_print.chunks(OPTION_PRINT_TESTCASES).enumerate() {
+            let to_print = Testcases {
+                testcases: chunk.to_vec()
+            };
+            let filename = format!(
+                "{}testcase-{}.bin", 
+                PRINT_FOLDER,
+                i
+            );  
+            print_testcases(&to_print, &filename);
+        }
+
+        /*
         // print remaining test cases.
-        if testcases_to_print.len() >0  {
+        if testcases_to_print.len() > 0  {
             let filename = format!(
                 "testcase-{}-{}.bin", 
                 num_test_cases - testcases_to_print.len(), 
@@ -2830,6 +2892,7 @@ fn twins_test_safety_attack_generator() {
             };
             print_testcases(&to_print, &filename);
         }
+        */
     }
 
     println!(

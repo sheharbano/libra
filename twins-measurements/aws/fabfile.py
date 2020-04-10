@@ -72,8 +72,8 @@ def info(ctx):
     '''
     set_hosts(ctx)
     print('\nAvailable machines:')
-    for host in ctx.hosts:
-        print(f'\t ssh -i {ctx.keyfile} {ctx.user}@{host}')
+    for i, host in enumerate(ctx.hosts):
+        print(f'{i}\t ssh -i {ctx.keyfile} {ctx.user}@{host}')
     print()
 
 
@@ -140,7 +140,7 @@ def update(ctx):
     job = f'*/2 * * * * ./{maintenance_script}'
 
     set_hosts(ctx)
-    for host in ctx.hosts:
+    for i, host in enumerate(ctx.hosts):
         c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
         c.put(run_script, '.')
         c.run(f'chmod +x {run_script}')
@@ -148,6 +148,7 @@ def update(ctx):
         c.run(f'chmod +x {maintenance_script}')
         c.run('crontab -r || true', hide=True)
         c.run(f'(crontab -l 2>/dev/null; echo "{job} -with args") | crontab -')
+        c.run(f'echo -e "{i}\n{len(ctx.hosts)}" > config_file.txt')
         c.run('(cd libra/ && git pull)')
 
 
@@ -174,6 +175,7 @@ def upload(ctx):
         print(f'[{progress}] Uploading {len(host_files[i])} files to {host}...')
         for file in host_files[i]:
             c.put(file, './testcases')
+            c.local(f'mv {file} ./uploaded')
 
 
 @task
