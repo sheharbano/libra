@@ -54,7 +54,7 @@ def set_hosts(ctx, status='running', cred=credentials, filter=filter):
 
 @task
 def test(ctx):
-    ''' Test the connection with all hosts. 
+    ''' Test the connection with all hosts.
     If the command succeeds, it prints "Hello, World!" for each host.
 
     COMMANDS:	fab test
@@ -182,7 +182,7 @@ def upload(ctx):
 def run(ctx):
     ''' Runs experiments with the specified configs.
 
-    CONFIG: 
+    CONFIG:
         0: Run all testcases from the files located in /testcases.
         1: Run randomly selected scenarios.
         2: Generate testcases, sharded on each machine.
@@ -211,7 +211,7 @@ def run(ctx):
 def kill(ctx):
     ''' Kill the process on all machines and (optionally) clear all state.
 
-    RESET: 
+    RESET:
         False: Only kill the process.
         True: Kill the process and delete all state and logs.
 
@@ -233,6 +233,7 @@ def kill(ctx):
         g.run(f'mv executed_tests/*.bin testcases/ || true')
         g.run(f'mv stalled_testcases/*.bin testcases/ || true')
         #g.run(f'rm stalled_testcases/*.log || true')
+        g.run(f'rm logs/* || true')
 
     if DELETE_ALL:
         g.run(f'rm -r stalled_testcases || true')
@@ -244,7 +245,7 @@ def kill(ctx):
 
 @task
 def status(ctx):
-    ''' Prints the execution progress. 
+    ''' Prints the execution progress.
 
     COMMANDS:	fab status
     '''
@@ -279,4 +280,33 @@ def status(ctx):
     total_total = sum([v[1] for v in status.values()])
     total_stalled = sum([v[2] for v in status.values()])
     print(f'TOTAL:\t\t{total_executed}/{total_total}\t\t{total_stalled}')
+    print('--------------------------------------------\n')
+
+@task
+def status2(ctx):
+    ''' Prints the execution progress.
+
+    COMMANDS:	fab status
+    '''
+    set_hosts(ctx)
+
+    status = {}
+    def count_lines(dir): return f'ls -l {dir} | grep -v ^l | wc -l'
+    print('Gathering data...\n')
+    for host in ctx.hosts:
+        c = Connection(host, user=ctx.user, connect_kwargs=ctx.connect_kwargs)
+        executed = c.run(count_lines('executed_tests'), hide=True)
+        try:
+            status[host] = int(executed.stdout)
+        except ValueError:
+            status[host] = 'N/A'
+
+    print('--------------------------------------------')
+    print('HOST\t\tEXECUTED')
+    print('--------------------------------------------')
+    for host, values in status.items():
+        print(f'{host}\t{values}')
+    print('--------------------------------------------')
+    total = sum([v for v in status.values()])
+    print(f'TOTAL:\t\t{total}')
     print('--------------------------------------------\n')

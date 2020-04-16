@@ -1,5 +1,6 @@
 import statistics as st
 import datetime
+import matplotlib
 import matplotlib.pyplot as plt
 import os
 import re
@@ -218,18 +219,26 @@ for nodes, values in executor_2_partitions_100ms_timeouts['nodes'].items():
     print_measurements(values['rounds'], measure='rounds')
 
 # Plot
-def plot_generator(values, rounds, measure='number of test cases'):
+def plot_generator(values, rounds, measure='number of testcases'):
+    unit = 'ms'
     x_values = [x**rounds for x in list(values.keys())]
-    y_values = [round(st.mean(data)) for data in values.values() if len(data) > 1]
-    y_err = [round(st.stdev(data)) for data in values.values() if len(data) > 2]
+    values = values.values()
+    if rounds > 4:
+        values = [[y/1000 for y in data] for data in values]
+        unit = 's'
+    y_values = [round(st.mean(data)) for data in values if len(data) > 1]
+    y_err = [round(st.stdev(data)) for data in values if len(data) > 2]
     #plt.plot(x_values, y_values, 'k-')
     #plt.plot(x_values, y_values, 'ko')
+    matplotlib.rcParams.update({'font.size': 18})
     plt.errorbar(
         x_values, y_values, yerr=y_err, uplims=True, lolims=True,
         label='7 nodes', marker='.', alpha=1, dashes=None
     )
+    plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
     plt.xlabel(measure)
-    plt.ylabel('time (ms)')
+    plt.ylabel(f'time ({unit})')
+    plt.tight_layout()
     plt.savefig(f'generator-{DEFAULT_PARTITIONS}-{DEFAULT_NODES}-{rounds}.pdf')
     plt.clf()
 
@@ -266,7 +275,7 @@ for rounds, values in generator_2_partitions['rounds'].items():
     plot_generator(values['y-filter'], rounds)
 
 # for nodes, values in executor_2_partitions['nodes'].items():
-plot_executor()
+#plot_executor()
 
-data = get_data(generation=False)
-print(f'\nNEW DATA [{len(data)==10}]: {data}\n')
+#data = get_data(generation=False)
+#print(f'\nNEW DATA [{len(data)==10}]: {data}\n')
